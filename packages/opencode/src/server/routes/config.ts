@@ -7,6 +7,7 @@ import { mapValues } from "remeda"
 import { errors } from "../error"
 import { Log } from "../../util/log"
 import { lazy } from "../../util/lazy"
+import { qwenDefaultModel, qwenProvider } from "@/qwen/meta"
 
 const log = Log.create({ service: "server" })
 
@@ -82,6 +83,14 @@ export const ConfigRoutes = lazy(() =>
       }),
       async (c) => {
         using _ = log.time("providers")
+        const qwen = qwenProvider()
+        if (Object.keys(qwen.models).length > 0) {
+          return c.json({
+            providers: [qwen],
+            default: { [qwen.id]: qwenDefaultModel(qwen) },
+          })
+        }
+
         const providers = await Provider.list().then((x) => mapValues(x, (item) => item))
         return c.json({
           providers: Object.values(providers),

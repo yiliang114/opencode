@@ -9,6 +9,7 @@ import { ProviderID } from "../../provider/schema"
 import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
+import { qwenDefaultModel, qwenProvider } from "@/qwen/meta"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -36,6 +37,15 @@ export const ProviderRoutes = lazy(() =>
         },
       }),
       async (c) => {
+        const qwen = qwenProvider()
+        if (Object.keys(qwen.models).length > 0) {
+          return c.json({
+            all: [qwen],
+            default: { [qwen.id]: qwenDefaultModel(qwen) },
+            connected: [qwen.id],
+          })
+        }
+
         const config = await Config.get()
         const disabled = new Set(config.disabled_providers ?? [])
         const enabled = config.enabled_providers ? new Set(config.enabled_providers) : undefined
@@ -78,7 +88,7 @@ export const ProviderRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        return c.json(await ProviderAuth.methods())
+        return c.json({})
       },
     )
     .post(

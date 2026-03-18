@@ -46,6 +46,7 @@ import { GoogleAuth } from "google-auth-library"
 import { ProviderTransform } from "./transform"
 import { Installation } from "../installation"
 import { ModelID, ProviderID } from "./schema"
+import { qwenProvider } from "@/qwen/meta"
 
 const DEFAULT_CHUNK_TIMEOUT = 300_000
 
@@ -1211,10 +1212,15 @@ export namespace Provider {
   }
 
   export async function getProvider(providerID: ProviderID) {
+    if (providerID === "qwen") return qwenProvider()
     return state().then((s) => s.providers[providerID])
   }
 
   export async function getModel(providerID: ProviderID, modelID: ModelID) {
+    if (providerID === "qwen") {
+      const info = qwenProvider().models[modelID]
+      if (info) return info
+    }
     const s = await state()
     const provider = s.providers[providerID]
     if (!provider) {

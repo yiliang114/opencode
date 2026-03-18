@@ -113,6 +113,37 @@ export namespace Pty {
     return Array.from(state().values()).map((s) => s.info)
   }
 
+  export function ptyEnv(input: {
+    command?: string
+    base?: Record<string, string | undefined>
+    env?: Record<string, string>
+    shell?: Record<string, string>
+  }) {
+    const env = Object.fromEntries(
+      Object.entries({
+        ...input.base,
+        ...input.env,
+        ...input.shell,
+        TERM: "xterm-256color",
+        OPENCODE_TERMINAL: "1",
+      }).flatMap(([key, value]) => (typeof value === "string" ? [[key, value]] : [])),
+    ) as Record<string, string>
+
+    if (input.command === "qwen") {
+      delete env.NO_COLOR
+      env.FORCE_COLOR = "1"
+      env.NODE_NO_WARNINGS = "1"
+    }
+
+    if (process.platform === "win32") {
+      env.LC_ALL = "C.UTF-8"
+      env.LC_CTYPE = "C.UTF-8"
+      env.LANG = "C.UTF-8"
+    }
+
+    return env
+  }
+
   export function get(id: PtyID) {
     return state().get(id)?.info
   }
@@ -127,19 +158,12 @@ export namespace Pty {
 
     const cwd = input.cwd || Instance.directory
     const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
-    const env = {
-      ...process.env,
-      ...input.env,
-      ...shellEnv.env,
-      TERM: "xterm-256color",
-      OPENCODE_TERMINAL: "1",
-    } as Record<string, string>
-
-    if (process.platform === "win32") {
-      env.LC_ALL = "C.UTF-8"
-      env.LC_CTYPE = "C.UTF-8"
-      env.LANG = "C.UTF-8"
-    }
+    const env = ptyEnv({
+      command,
+      base: process.env,
+      env: input.env,
+      shell: shellEnv.env,
+    })
     log.info("creating session", { id, cmd: command, args, cwd })
 
     const spawn = await pty()

@@ -16,7 +16,7 @@ export const dict = {
   "command.category.terminal": "终端",
   "command.category.model": "模型",
   "command.category.mcp": "MCP",
-  "command.category.agent": "智能体",
+  "command.category.agent": "模式",
   "command.category.permissions": "权限",
   "command.category.workspace": "工作区",
   "command.category.settings": "设置",
@@ -68,8 +68,8 @@ export const dict = {
 
   "command.review.toggle": "切换审查",
 
-  "command.terminal.new": "新建终端",
-  "command.terminal.new.description": "创建新的终端标签页",
+  "command.terminal.new": "新建 Qwen 终端",
+  "command.terminal.new.description": "创建新的 Qwen 终端标签页",
 
   "command.steps.toggle": "切换步骤",
   "command.steps.toggle.description": "显示或隐藏当前消息的步骤",
@@ -85,10 +85,10 @@ export const dict = {
   "command.mcp.toggle": "切换 MCPs",
   "command.mcp.toggle.description": "切换 MCPs",
 
-  "command.agent.cycle": "切换智能体",
-  "command.agent.cycle.description": "切换到下一个智能体",
-  "command.agent.cycle.reverse": "反向切换智能体",
-  "command.agent.cycle.reverse.description": "切换到上一个智能体",
+  "command.agent.cycle": "切换模式",
+  "command.agent.cycle.description": "切换到下一个模式",
+  "command.agent.cycle.reverse": "反向切换模式",
+  "command.agent.cycle.reverse.description": "切换到上一个模式",
 
   "command.model.variant.cycle": "切换思考强度",
   "command.model.variant.cycle.description": "切换到下一个强度等级",
@@ -298,8 +298,8 @@ export const dict = {
   "prompt.action.stop": "停止",
   "prompt.toast.pasteUnsupported.title": "不支持的附件",
   "prompt.toast.pasteUnsupported.description": "此处仅能附加图片、PDF 或文本文件。",
-  "prompt.toast.modelAgentRequired.title": "请选择智能体和模型",
-  "prompt.toast.modelAgentRequired.description": "发送提示前请先选择智能体和模型。",
+  "prompt.toast.modelAgentRequired.title": "请选择模式和模型",
+  "prompt.toast.modelAgentRequired.description": "发送提示前请先选择模式和模型。",
   "prompt.toast.worktreeCreateFailed.title": "创建工作树失败",
   "prompt.toast.sessionCreateFailed.title": "创建会话失败",
   "prompt.toast.shellSendFailed.title": "发送 shell 命令失败",
@@ -743,7 +743,7 @@ export const dict = {
   "settings.shortcuts.group.general": "通用",
   "settings.shortcuts.group.session": "会话",
   "settings.shortcuts.group.navigation": "导航",
-  "settings.shortcuts.group.modelAndAgent": "模型与智能体",
+  "settings.shortcuts.group.modelAndAgent": "模型与模式",
   "settings.shortcuts.group.terminal": "终端",
   "settings.shortcuts.group.prompt": "提示",
 
@@ -760,8 +760,8 @@ export const dict = {
   "settings.models.title": "模型",
   "settings.models.description": "模型设置将在此处可配置。",
 
-  "settings.agents.title": "智能体",
-  "settings.agents.description": "智能体设置将在此处可配置。",
+  "settings.agents.title": "模式",
+  "settings.agents.description": "模式设置将在此处可配置。",
 
   "settings.commands.title": "命令",
   "settings.commands.description": "命令设置将在此处可配置。",

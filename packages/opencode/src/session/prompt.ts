@@ -48,6 +48,8 @@ import { iife } from "@/util/iife"
 import { Shell } from "@/shell/shell"
 import { Truncate } from "@/tool/truncate"
 import { decodeDataUrl } from "@/util/data-url"
+import { QwenRuntime } from "@/qwen/runtime"
+import { qwenAgents, qwenPrompt, QWEN_PROVIDER } from "@/qwen/meta"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -325,6 +327,18 @@ export namespace SessionPrompt {
       ) {
         log.info("exiting loop", { sessionID })
         break
+      }
+
+      if (lastUser.model.providerID === QWEN_PROVIDER) {
+        const current = msgs.findLast((item) => item.info.id === lastUser.id)
+        if (!current) throw new Error("No user message found for Qwen run.")
+        const result = await QwenRuntime.run({
+          session,
+          user: lastUser,
+          prompt: qwenPrompt(current.parts),
+          abort,
+        })
+        return result
       }
 
       step++
@@ -963,7 +977,11 @@ export namespace SessionPrompt {
   }
 
   async function createUserMessage(input: PromptInput) {
-    const agent = await Agent.get(input.agent ?? (await Agent.defaultAgent()))
+    const name =
+      input.agent ??
+      (input.model?.providerID === QWEN_PROVIDER ? "default" : await Agent.defaultAgent())
+    const agent = (await Agent.get(name)) ?? qwenAgents().find((item) => item.name === name)
+    if (!agent) throw new Error(`Agent "${name}" not found`)
 
     const model = input.model ?? agent.model ?? (await lastModel(input.sessionID))
     const full =

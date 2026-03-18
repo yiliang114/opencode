@@ -1,0 +1,3 @@
+[submodule "vendor/qwen-code"]
+	path = vendor/qwen-code
+	url = /Users/yiliang/projects/projj/github.com/QwenLM/qwen-code

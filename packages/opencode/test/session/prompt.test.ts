@@ -210,3 +210,38 @@ describe("session.prompt agent variant", () => {
     }
   })
 })
+
+describe("session.prompt qwen mode", () => {
+  test("creates a qwen user message without native opencode agent config", async () => {
+    await using tmp = await tmpdir({
+      git: true,
+    })
+
+    await Instance.provide({
+      directory: tmp.path,
+      fn: async () => {
+        const session = await Session.create({})
+
+        const msg = await SessionPrompt.prompt({
+          sessionID: session.id,
+          agent: "default",
+          model: {
+            providerID: ProviderID.make("qwen"),
+            modelID: ModelID.make("coder-model"),
+          },
+          noReply: true,
+          parts: [{ type: "text", text: "hello qwen" }],
+        })
+
+        if (msg.info.role !== "user") throw new Error("expected user message")
+        expect(msg.info.agent).toBe("default")
+        expect(msg.info.model).toEqual({
+          providerID: ProviderID.make("qwen"),
+          modelID: ModelID.make("coder-model"),
+        })
+
+        await Session.remove(session.id)
+      },
+    })
+  })
+})

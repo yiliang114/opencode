@@ -284,6 +284,42 @@ test("env variable takes precedence, config merges options", async () => {
   })
 })
 
+test("qwen provider model resolves from qwen settings", async () => {
+  await using tmp = await tmpdir({
+    init: async (dir) => {
+      await Bun.write(
+        path.join(dir, ".qwen", "settings.json"),
+        JSON.stringify({
+          modelProviders: {
+            openai: [
+              {
+                id: "qwen3-coder-plus",
+                name: "Qwen 3 Coder Plus",
+              },
+            ],
+          },
+          model: {
+            name: "qwen3-coder-plus",
+          },
+        }),
+      )
+    },
+  })
+
+  await Instance.provide({
+    directory: tmp.path,
+    init: async () => {
+      Env.set("HOME", tmp.path)
+    },
+    fn: async () => {
+      const model = await Provider.getModel(ProviderID.make("qwen"), ModelID.make("qwen3-coder-plus"))
+      expect(String(model.providerID)).toBe("qwen")
+      expect(String(model.id)).toBe("qwen3-coder-plus")
+      expect(model.name).toBe("Qwen 3 Coder Plus")
+    },
+  })
+})
+
 test("getModel returns model for valid provider/model", async () => {
   await using tmp = await tmpdir({
     init: async (dir) => {

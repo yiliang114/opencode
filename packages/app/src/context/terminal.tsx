@@ -37,6 +37,10 @@ function numberFromTitle(title: string) {
   return titleNumber(title, MAX_TERMINAL_SESSIONS)
 }
 
+function qwenTitle(number: number) {
+  return `Qwen ${number}`
+}
+
 function pty(value: unknown): LocalPTY | undefined {
   if (!record(value)) return
 
@@ -199,13 +203,17 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       const nextNumber = pickNextTerminalNumber()
 
       sdk.client.pty
-        .create({ title: defaultTitle(nextNumber) })
+        .create({
+          title: qwenTitle(nextNumber),
+          command: "qwen",
+          cwd: dir,
+        })
         .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
           if (!id) return
           const newTerminal = {
             id,
-            title: pty.data?.title ?? defaultTitle(nextNumber),
+            title: pty.data?.title ?? qwenTitle(nextNumber),
             titleNumber: nextNumber,
           }
           setStore("all", store.all.length, newTerminal)
