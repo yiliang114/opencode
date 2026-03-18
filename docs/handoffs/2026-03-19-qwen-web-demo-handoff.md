@@ -5,6 +5,8 @@
 - branch: `chore/qwen-code-web-research`
 - repo: `https://github.com/yiliang114/opencode`
 - submodule: `vendor/qwen-code`
+- qwen fork: `https://github.com/yiliang114/qwen-code.git`
+- qwen fork branch: `opencode-web-demo`
 
 ## What Is Done
 
@@ -62,6 +64,7 @@
 1. Clone and enter the repo.
 2. Update submodules:
    - `git submodule update --init --recursive`
+   - if needed: `git submodule sync --recursive`
 3. Install deps:
    - `bun install`
 4. Start from this branch:

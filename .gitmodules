@@ -1,3 +1,4 @@
 [submodule "vendor/qwen-code"]
 	path = vendor/qwen-code
-	url = /Users/yiliang/projects/projj/github.com/QwenLM/qwen-code
+	url = https://github.com/yiliang114/qwen-code.git
+	branch = opencode-web-demo
