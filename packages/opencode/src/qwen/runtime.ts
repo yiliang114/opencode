@@ -2,7 +2,7 @@ import fs from "fs"
 import path from "path"
 import { createInterface } from "readline"
 import { spawn } from "child_process"
-import { createHash, randomUUID } from "crypto"
+import { randomUUID } from "crypto"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/util/error"
 import { MessageV2 } from "@/session/message-v2"
@@ -14,6 +14,8 @@ import { Question } from "@/question"
 import { Log } from "@/util/log"
 import { ProviderID } from "@/provider/schema"
 import { parseQwenTodos, QWEN_PROVIDER, toQwenQuestions, withQwenAnswers } from "./meta"
+import { qwenSessionArgs, qwenSessionID } from "./session"
+import { which } from "@/util/which"
 
 const log = Log.create({ service: "qwen.runtime" })
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../")
@@ -115,18 +117,39 @@ type Block =
   | { kind: "reasoning"; part: MessageV2.ReasoningPart }
   | { kind: "tool"; part: MessageV2.ToolPart }
 
-export function qwenCommand(exec = process.execPath) {
-  if (fs.existsSync(dist)) {
+export function qwenCommand(
+  exec = process.execPath,
+  input?: {
+    dist?: string
+    tsx?: string
+    cli?: string
+    which?: (cmd: string) => string | null
+  },
+) {
+  const file = input?.dist ?? dist
+  const run = input?.tsx ?? tsx
+  const entry = input?.cli ?? cli
+  const pick = input?.which ?? which
+  const qwen = pick("qwen")
+
+  if (qwen) {
     return {
-      command: exec.includes("bun") ? "node" : exec,
-      args: [dist],
+      command: qwen,
+      args: [],
     }
   }
 
-  if (fs.existsSync(tsx) && fs.existsSync(cli)) {
+  if (fs.existsSync(file)) {
     return {
-      command: tsx,
-      args: [cli],
+      command: exec.includes("bun") ? "node" : exec,
+      args: [file],
+    }
+  }
+
+  if (fs.existsSync(run) && fs.existsSync(entry)) {
+    return {
+      command: run,
+      args: [entry],
     }
   }
 
@@ -138,6 +161,33 @@ export function qwenCommand(exec = process.execPath) {
 
 export function qwenWait(input: { done: Promise<void>; exit: Promise<void> }) {
   return Promise.race([input.done, input.exit])
+}
+
+export async function qwenRunArgs(input: {
+  dir: string
+  id: string
+  model: string
+  mode: string
+  home?: string
+}) {
+  return [
+    "--input-format",
+    "stream-json",
+    "--output-format",
+    "stream-json",
+    "--include-partial-messages",
+    "--channel",
+    "SDK",
+    "--approval-mode",
+    input.mode,
+    ...(await qwenSessionArgs({
+      dir: input.dir,
+      id: input.id,
+      home: input.home,
+    })),
+    "--model",
+    input.model,
+  ]
 }
 
 function join(content: string | Array<{ type: "text"; text: string }> | undefined) {
@@ -159,13 +209,7 @@ function usage(input: Extract<QwenMessage, { type: "result" }>["usage"]) {
   }
 }
 
-export function qwenSessionID(id: string) {
-  const buf = createHash("md5").update(id).digest()
-  buf[6] = (buf[6] & 0x0f) | 0x40
-  buf[8] = (buf[8] & 0x3f) | 0x80
-  const hex = buf.toString("hex")
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`
-}
+export { qwenSessionID } from "./session"
 
 async function ask(
   sessionID: SessionID,
@@ -273,19 +317,12 @@ export namespace QwenRuntime {
     const proc = qwenCommand()
     const child = spawn(proc.command, [
       ...proc.args,
-      "--input-format",
-      "stream-json",
-      "--output-format",
-      "stream-json",
-      "--include-partial-messages",
-      "--channel",
-      "SDK",
-      "--approval-mode",
-      input.user.agent,
-      "--session-id",
-      sessionID,
-      "--model",
-      input.user.model.modelID,
+      ...(await qwenRunArgs({
+        dir: input.session.directory,
+        id: input.session.id,
+        model: input.user.model.modelID,
+        mode: input.user.agent,
+      })),
     ], {
       cwd: input.session.directory,
       env: process.env,

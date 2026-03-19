@@ -74,13 +74,14 @@ function model(id: string, name: string): Provider.Info["models"][string] {
   return {
     id: ModelID.make(id),
     providerID: ProviderID.make(QWEN_PROVIDER),
+    family: id,
     api: {
       id: "qwen",
       url: "https://chat.qwen.ai",
       npm: "@qwen-code/qwen-code",
     },
     name,
-    release_date: "2026-01-23",
+    release_date: "",
     capabilities: {
       temperature: false,
       reasoning: true,

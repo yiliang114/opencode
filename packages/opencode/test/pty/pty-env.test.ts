@@ -19,17 +19,16 @@ test("ptyEnv - prepares qwen terminal env", () => {
   })
 })
 
-test("ptyEnv - keeps non-qwen env unchanged except terminal marker", () => {
+test("ptyEnv - removes NO_COLOR for shell terminals", () => {
   expect(
     Pty.ptyEnv({
-      command: "bash",
+      command: "zsh",
       base: {
         NO_COLOR: "1",
         PATH: "/usr/bin",
       },
     }),
   ).toEqual({
-    NO_COLOR: "1",
     PATH: "/usr/bin",
     TERM: "xterm-256color",
     OPENCODE_TERMINAL: "1",

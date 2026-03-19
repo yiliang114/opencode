@@ -5,8 +5,11 @@ import { PermissionNext } from "../../src/permission"
 import { tmpdir } from "../fixture/fixture"
 import { qwenAgents, qwenDefaultModel, qwenProvider, parseQwenTodos, withQwenAnswers } from "../../src/qwen/meta"
 
-test("qwenProvider - returns qwen models only", () => {
-  const provider = qwenProvider()
+test("qwenProvider - falls back to bundled model when settings are missing", () => {
+  const provider = qwenProvider({
+    dir: path.join(process.cwd(), "missing-dir"),
+    home: path.join(process.cwd(), "missing-home"),
+  })
   expect(String(provider.id)).toBe("qwen")
   expect(Object.keys(provider.models)).toEqual(["coder-model"])
   expect(provider.models["coder-model"]?.name).toBe("coder-model")
@@ -62,6 +65,27 @@ test("qwenProvider - reads models from qwen settings", async () => {
   expect(String(qwenDefaultModel(provider, { dir: tmp.path, home: path.join(tmp.path, "missing-home") }))).toBe(
     "qwen3.5-plus",
   )
+})
+
+test("qwenProvider - keeps configured models in separate families", async () => {
+  await using tmp = await tmpdir({})
+  await mkdir(path.join(tmp.path, ".qwen"), { recursive: true })
+  await Bun.write(
+    path.join(tmp.path, ".qwen", "settings.json"),
+    JSON.stringify({
+      modelProviders: {
+        openai: [{ id: "qwen3-coder-plus" }, { id: "qwen3.5-plus" }],
+      },
+    }),
+  )
+
+  const provider = qwenProvider({
+    dir: tmp.path,
+    home: path.join(tmp.path, "missing-home"),
+  })
+
+  expect(provider.models["qwen3-coder-plus"]?.family).toBe("qwen3-coder-plus")
+  expect(provider.models["qwen3.5-plus"]?.family).toBe("qwen3.5-plus")
 })
 
 test("qwenProvider - uses HOME env by default", async () => {

@@ -41,6 +41,30 @@ function qwenTitle(number: number) {
   return `Qwen ${number}`
 }
 
+export function qwenInput(dir: string, number: number, session?: string) {
+  return {
+    title: qwenTitle(number),
+    command: "qwen",
+    cwd: dir,
+    ...(session
+      ? {
+          env: {
+            OPENCODE_SESSION_ID: session,
+          },
+        }
+      : {}),
+  }
+}
+
+export function terminalInput(input: {
+  dir: string
+  cwd?: string
+  number: number
+  session?: string
+}) {
+  return qwenInput(input.cwd || input.dir, input.number, input.session)
+}
+
 function pty(value: unknown): LocalPTY | undefined {
   if (!record(value)) return
 
@@ -134,7 +158,13 @@ export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], plat
   }
 }
 
-function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: string, legacySessionID?: string) {
+function createWorkspaceTerminalSession(
+  sdk: ReturnType<typeof useSDK>,
+  dir: string,
+  cwd: () => string,
+  id: () => string | undefined,
+  legacySessionID?: string,
+) {
   const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
 
   const [store, setStore, _, ready] = persisted(
@@ -203,11 +233,14 @@ function createWorkspaceTerminalSession(sdk: ReturnType<typeof useSDK>, dir: str
       const nextNumber = pickNextTerminalNumber()
 
       sdk.client.pty
-        .create({
-          title: qwenTitle(nextNumber),
-          command: "qwen",
-          cwd: dir,
-        })
+        .create(
+          terminalInput({
+            dir,
+            cwd: cwd(),
+            number: nextNumber,
+            session: id(),
+          }),
+        )
         .then((pty: { data?: { id?: string; title?: string } }) => {
           const id = pty.data?.id
           if (!id) return
@@ -378,7 +411,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       }
 
       const entry = createRoot((dispose) => ({
-        value: createWorkspaceTerminalSession(sdk, dir, legacySessionID),
+        value: createWorkspaceTerminalSession(sdk, dir, () => sdk.directory, () => params.id || undefined, legacySessionID),
         dispose,
       }))
 
@@ -387,11 +420,11 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       return entry.value
     }
 
-    const workspace = createMemo(() => loadWorkspace(params.dir!, params.id))
+    const workspace = createMemo(() => loadWorkspace(sdk.directory, params.id))
 
     createEffect(
       on(
-        () => ({ dir: params.dir, id: params.id }),
+        () => ({ dir: sdk.directory, id: params.id }),
         (next, prev) => {
           if (!prev?.dir) return
           if (next.dir === prev.dir && next.id === prev.id) return

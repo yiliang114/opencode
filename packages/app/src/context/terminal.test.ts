@@ -3,6 +3,23 @@ import { beforeAll, describe, expect, mock, test } from "bun:test"
 let getWorkspaceTerminalCacheKey: (dir: string) => string
 let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
 let migrateTerminalState: (value: unknown) => unknown
+let terminalInput: (input: {
+  dir: string
+  cwd?: string
+  number: number
+  session?: string
+}) => {
+  title: string
+  command: string
+  cwd: string
+  env?: Record<string, string>
+}
+let qwenInput: (dir: string, number: number, session?: string) => {
+  title: string
+  command: string
+  cwd: string
+  env?: Record<string, string>
+}
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
@@ -19,6 +36,8 @@ beforeAll(async () => {
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
+  terminalInput = mod.terminalInput
+  qwenInput = mod.qwenInput
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {
@@ -77,6 +96,60 @@ describe("migrateTerminalState", () => {
         { id: "one", title: "Terminal 1", titleNumber: 1 },
         { id: "two", title: "shell", titleNumber: 7 },
       ],
+    })
+  })
+})
+
+describe("qwenInput", () => {
+  test("creates a qwen terminal payload without session bridge by default", () => {
+    expect(qwenInput("/repo", 2)).toEqual({
+      title: "Qwen 2",
+      command: "qwen",
+      cwd: "/repo",
+    })
+  })
+
+  test("includes the current session id for qwen bridge", () => {
+    expect(qwenInput("/repo", 3, "ses_123")).toEqual({
+      title: "Qwen 3",
+      command: "qwen",
+      cwd: "/repo",
+      env: {
+        OPENCODE_SESSION_ID: "ses_123",
+      },
+    })
+  })
+})
+
+describe("terminalInput", () => {
+  test("prefers the resolved sdk directory over the route slug", () => {
+    expect(
+      terminalInput({
+        dir: "L3JvdXRlLXNsdWc",
+        cwd: "/repo",
+        number: 4,
+        session: "ses_123",
+      }),
+    ).toEqual({
+      title: "Qwen 4",
+      command: "qwen",
+      cwd: "/repo",
+      env: {
+        OPENCODE_SESSION_ID: "ses_123",
+      },
+    })
+  })
+
+  test("falls back to the route directory when no resolved path is available", () => {
+    expect(
+      terminalInput({
+        dir: "/repo",
+        number: 1,
+      }),
+    ).toEqual({
+      title: "Qwen 1",
+      command: "qwen",
+      cwd: "/repo",
     })
   })
 })

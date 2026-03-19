@@ -8,6 +8,7 @@ import { lazy } from "@opencode-ai/util/lazy"
 import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
+import { qwenSessionArgs } from "@/qwen/session"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -129,8 +130,11 @@ export namespace Pty {
       }).flatMap(([key, value]) => (typeof value === "string" ? [[key, value]] : [])),
     ) as Record<string, string>
 
-    if (input.command === "qwen") {
+    if (input.command === "qwen" || input.command?.endsWith("sh")) {
       delete env.NO_COLOR
+    }
+
+    if (input.command === "qwen") {
       env.FORCE_COLOR = "1"
       env.NODE_NO_WARNINGS = "1"
     }
@@ -151,17 +155,25 @@ export namespace Pty {
   export async function create(input: CreateInput) {
     const id = PtyID.ascending()
     const command = input.command || Shell.preferred()
-    const args = input.args || []
-    if (command.endsWith("sh")) {
-      args.push("-l")
-    }
-
     const cwd = input.cwd || Instance.directory
+    const raw = [...(input.args || [])]
+    const env = input.env ? { ...input.env } : undefined
+    const sid = command === "qwen" ? env?.OPENCODE_SESSION_ID : undefined
+    if (env?.OPENCODE_SESSION_ID) delete env.OPENCODE_SESSION_ID
+    const args =
+      command === "qwen" &&
+      sid &&
+      !raw.includes("--continue") &&
+      !raw.includes("--resume") &&
+      !raw.includes("--session-id")
+        ? [...(await qwenSessionArgs({ dir: cwd, id: sid })), ...raw]
+        : raw
+    if (command.endsWith("sh")) args.push("-l")
     const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
-    const env = ptyEnv({
+    const vars = ptyEnv({
       command,
       base: process.env,
-      env: input.env,
+      env,
       shell: shellEnv.env,
     })
     log.info("creating session", { id, cmd: command, args, cwd })
@@ -170,7 +182,7 @@ export namespace Pty {
     const ptyProcess = spawn(command, args, {
       name: "xterm-256color",
       cwd,
-      env,
+      env: vars,
     })
 
     const info = {
