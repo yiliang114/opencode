@@ -83,10 +83,13 @@ const runnerEnv = {
   VITE_OPENCODE_SERVER_HOST: "127.0.0.1",
   VITE_OPENCODE_SERVER_PORT: String(serverPort),
   PLAYWRIGHT_PORT: String(webPort),
+  PLAYWRIGHT_REUSE_SERVER: "0",
+  PLAYWRIGHT_WEB_SERVER: "0",
 } satisfies Record<string, string>
 
 let seed: ReturnType<typeof Bun.spawn> | undefined
 let runner: ReturnType<typeof Bun.spawn> | undefined
+let web: ReturnType<typeof Bun.spawn> | undefined
 let server: { stop: () => Promise<void> | void } | undefined
 let inst: { Instance: { disposeAll: () => Promise<void> | void } } | undefined
 let cleaned = false
@@ -97,6 +100,7 @@ const cleanup = async () => {
 
   if (seed && seed.exitCode === null) seed.kill("SIGTERM")
   if (runner && runner.exitCode === null) runner.kill("SIGTERM")
+  if (web && web.exitCode === null) web.kill("SIGTERM")
 
   const jobs = [
     inst?.Instance.disposeAll(),
@@ -162,6 +166,13 @@ try {
     console.log(`opencode server listening on http://127.0.0.1:${serverPort}`)
 
     await waitForHealth(`http://127.0.0.1:${serverPort}/global/health`)
+    web = Bun.spawn(["bun", "run", "dev", "--", "--host", "0.0.0.0", "--port", String(webPort)], {
+      cwd: appDir,
+      env: runnerEnv,
+      stdout: "inherit",
+      stderr: "inherit",
+    })
+    await waitForHealth(`http://127.0.0.1:${webPort}/`)
     runner = Bun.spawn(["bun", "test:e2e", ...extraArgs], {
       cwd: appDir,
       env: runnerEnv,

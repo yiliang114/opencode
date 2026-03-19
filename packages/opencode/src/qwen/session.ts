@@ -18,6 +18,10 @@ type Row = {
   cwd?: string
 }
 
+export function qwenHome(home?: string) {
+  return home ?? process.env.OPENCODE_TEST_HOME ?? process.env.HOME ?? os.homedir()
+}
+
 export function qwenSessionID(id: string) {
   const buf = createHash("md5").update(id).digest()
   buf[6] = (buf[6] & 0x0f) | 0x40
@@ -33,8 +37,7 @@ export async function qwenSessionArgs(input: {
 }) {
   if (!input.id) return []
   const sid = qwenSessionID(input.id)
-  const home = input.home ?? process.env.HOME ?? os.homedir()
-  const file = Bun.file(path.join(home, ".qwen", "projects", project(input.dir), "chats", `${sid}.jsonl`))
+  const file = Bun.file(path.join(qwenHome(input.home), ".qwen", "projects", project(input.dir), "chats", `${sid}.jsonl`))
   if (!(await file.exists())) return ["--session-id", sid]
 
   const line = (await file.text()).split("\n", 1)[0]?.trim()

@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import path from "path"
 import { mkdir } from "fs/promises"
 import { tmpdir } from "../fixture/fixture"
-import { qwenSessionArgs, qwenSessionID } from "../../src/qwen/session"
+import { qwenHome, qwenSessionArgs, qwenSessionID } from "../../src/qwen/session"
 
 const project = (dir: string) => dir.replace(/[^a-zA-Z0-9]/g, "-")
 
@@ -49,4 +49,18 @@ test("qwenSessionArgs - starts a new session when saved chat belongs to another 
       home: tmp.path,
     }),
   ).toEqual(["--session-id", id])
+})
+
+test("qwenHome - prefers OPENCODE_TEST_HOME over HOME", () => {
+  const test = process.env.OPENCODE_TEST_HOME
+  const home = process.env.HOME
+  process.env.OPENCODE_TEST_HOME = "/tmp/qwen-test-home"
+  process.env.HOME = "/tmp/qwen-home"
+
+  expect(qwenHome()).toBe("/tmp/qwen-test-home")
+
+  if (test === undefined) delete process.env.OPENCODE_TEST_HOME
+  else process.env.OPENCODE_TEST_HOME = test
+  if (home === undefined) delete process.env.HOME
+  else process.env.HOME = home
 })

@@ -47,6 +47,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { syncQwenSession } from "@/pages/session/session-switch"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
@@ -313,6 +314,8 @@ export default function Page() {
   const terminal = useTerminal()
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
   const { params, sessionKey, tabs, view } = useSessionLayout()
+  const surface = createMemo(() => view().surface.current())
+  const terminalMode = createMemo(() => !!params.id && surface() === "terminal")
 
   createEffect(() => {
     if (!untrack(() => prompt.ready())) return
@@ -1649,6 +1652,35 @@ export default function Page() {
     if (fillFrame !== undefined) cancelAnimationFrame(fillFrame)
   })
 
+  const switchTerminal = () => {
+    const id = params.id
+    if (!id) return
+    terminal.openSession(id, info()?.directory)
+    view().terminal.close()
+    view().surface.set("terminal")
+  }
+
+  const switchChat = async () => {
+    const id = params.id
+    if (!id) return
+    try {
+      await syncQwenSession({
+        url: sdk.url,
+        sessionID: id,
+      })
+      await sync.session.sync(id, { force: true })
+      await sync.session.todo(id, { force: true })
+    } catch (error) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: formatServerError(error, language.t),
+      })
+      return
+    }
+    view().terminal.close()
+    view().surface.set("chat")
+  }
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
@@ -1691,6 +1723,9 @@ export default function Page() {
         >
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
+              <Match when={terminalMode()}>
+                <TerminalPanel full onSwitchChat={() => void switchChat()} />
+              </Match>
               <Match when={params.id}>
                 <Show when={lastUserMessage()}>
                   <MessageTimeline
@@ -1732,6 +1767,7 @@ export default function Page() {
                     }}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
+                    onSwitchTerminal={switchTerminal}
                   />
                 </Show>
               </Match>
@@ -1741,55 +1777,57 @@ export default function Page() {
             </Switch>
           </div>
 
-          <SessionComposerRegion
-            state={composer}
-            ready={!store.deferRender && messagesReady()}
-            centered={centered()}
-            inputRef={(el) => {
-              inputRef = el
-            }}
-            newSessionWorktree={newSessionWorktree()}
-            onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
-            onSubmit={() => {
-              comments.clear()
-              resumeScroll()
-            }}
-            onResponseSubmit={resumeScroll}
-            followup={
-              params.id
-                ? {
-                    queue: queueEnabled,
-                    items: followupDock(),
-                    sending: sendingFollowup(),
-                    edit: editingFollowup(),
-                    onQueue: queueFollowup,
-                    onAbort: () => {
-                      const id = params.id
-                      if (!id) return
-                      setFollowup("paused", id, true)
-                    },
-                    onSend: (id) => {
-                      void sendFollowup(params.id!, id, { manual: true })
-                    },
-                    onEdit: editFollowup,
-                    onEditLoaded: clearFollowupEdit,
-                  }
-                : undefined
-            }
-            revert={
-              rolled().length > 0
-                ? {
-                    items: rolled(),
-                    restoring: ui.restoring,
-                    disabled: ui.reverting,
-                    onRestore: restore,
-                  }
-                : undefined
-            }
-            setPromptDockRef={(el) => {
-              promptDock = el
-            }}
-          />
+          <Show when={!terminalMode()}>
+            <SessionComposerRegion
+              state={composer}
+              ready={!store.deferRender && messagesReady()}
+              centered={centered()}
+              inputRef={(el) => {
+                inputRef = el
+              }}
+              newSessionWorktree={newSessionWorktree()}
+              onNewSessionWorktreeReset={() => setStore("newSessionWorktree", "main")}
+              onSubmit={() => {
+                comments.clear()
+                resumeScroll()
+              }}
+              onResponseSubmit={resumeScroll}
+              followup={
+                params.id
+                  ? {
+                      queue: queueEnabled,
+                      items: followupDock(),
+                      sending: sendingFollowup(),
+                      edit: editingFollowup(),
+                      onQueue: queueFollowup,
+                      onAbort: () => {
+                        const id = params.id
+                        if (!id) return
+                        setFollowup("paused", id, true)
+                      },
+                      onSend: (id) => {
+                        void sendFollowup(params.id!, id, { manual: true })
+                      },
+                      onEdit: editFollowup,
+                      onEditLoaded: clearFollowupEdit,
+                    }
+                  : undefined
+              }
+              revert={
+                rolled().length > 0
+                  ? {
+                      items: rolled(),
+                      restoring: ui.restoring,
+                      disabled: ui.reverting,
+                      onRestore: restore,
+                    }
+                  : undefined
+              }
+              setPromptDockRef={(el) => {
+                promptDock = el
+              }}
+            />
+          </Show>
 
           <Show when={desktopReviewOpen()}>
             <div onPointerDown={() => size.start()}>
@@ -1816,7 +1854,9 @@ export default function Page() {
         />
       </div>
 
-      <TerminalPanel />
+      <Show when={!terminalMode()}>
+        <TerminalPanel />
+      </Show>
     </div>
   )
 }

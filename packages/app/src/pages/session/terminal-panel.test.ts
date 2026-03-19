@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { terminalTabLabel } from "./terminal-label"
+import { emptyTerminalAction } from "./terminal-surface"
 
 const t = (key: string, vars?: Record<string, string | number | boolean>) => {
   if (key === "terminal.title.numbered") return `Terminal ${vars?.number}`
@@ -21,5 +22,15 @@ describe("terminalTabLabel", () => {
   test("falls back to generic title", () => {
     const label = terminalTabLabel({ title: "", titleNumber: 0, t })
     expect(label).toBe("Terminal")
+  })
+})
+
+describe("emptyTerminalAction", () => {
+  test("closes the drawer in docked mode", () => {
+    expect(emptyTerminalAction({ full: false })).toBe("close")
+  })
+
+  test("returns to chat in full mode", () => {
+    expect(emptyTerminalAction({ full: true })).toBe("chat")
   })
 })

@@ -11,6 +11,7 @@ export type LocalPTY = {
   id: string
   title: string
   titleNumber: number
+  session?: string
   rows?: number
   cols?: number
   buffer?: string
@@ -37,6 +38,11 @@ function numberFromTitle(title: string) {
   return titleNumber(title, MAX_TERMINAL_SESSIONS)
 }
 
+export function findSessionTerminal<T extends { session?: string }>(all: T[], session?: string) {
+  if (!session) return
+  return all.find((pty) => pty.session === session)
+}
+
 function qwenTitle(number: number) {
   return `Qwen ${number}`
 }
@@ -56,13 +62,19 @@ export function qwenInput(dir: string, number: number, session?: string) {
   }
 }
 
+export function ptySession(session?: string, reuse?: boolean) {
+  if (!reuse) return
+  return session
+}
+
 export function terminalInput(input: {
   dir: string
   cwd?: string
+  sessionDir?: string
   number: number
   session?: string
 }) {
-  return qwenInput(input.cwd || input.dir, input.number, input.session)
+  return qwenInput(input.sessionDir || input.cwd || input.dir, input.number, input.session)
 }
 
 function pty(value: unknown): LocalPTY | undefined {
@@ -73,6 +85,7 @@ function pty(value: unknown): LocalPTY | undefined {
 
   const title = text(value.title) ?? ""
   const number = num(value.titleNumber)
+  const session = text(value.session)
   const rows = num(value.rows)
   const cols = num(value.cols)
   const buffer = text(value.buffer)
@@ -83,6 +96,7 @@ function pty(value: unknown): LocalPTY | undefined {
     id,
     title,
     titleNumber: number && number > 0 ? number : (numberFromTitle(title) ?? 0),
+    ...(session !== undefined ? { session } : {}),
     ...(rows !== undefined ? { rows } : {}),
     ...(cols !== undefined ? { cols } : {}),
     ...(buffer !== undefined ? { buffer } : {}),
@@ -229,16 +243,18 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new() {
+    new(session?: string, sessionDir?: string) {
       const nextNumber = pickNextTerminalNumber()
+      const next = ptySession(session)
 
       sdk.client.pty
         .create(
           terminalInput({
             dir,
             cwd: cwd(),
+            sessionDir,
             number: nextNumber,
-            session: id(),
+            session: next,
           }),
         )
         .then((pty: { data?: { id?: string; title?: string } }) => {
@@ -248,6 +264,7 @@ function createWorkspaceTerminalSession(
             id,
             title: pty.data?.title ?? qwenTitle(nextNumber),
             titleNumber: nextNumber,
+            session: next,
           }
           setStore("all", store.all.length, newTerminal)
           setStore("active", id)
@@ -323,6 +340,16 @@ function createWorkspaceTerminalSession(
     },
     open(id: string) {
       setStore("active", id)
+    },
+    openSession(session = id(), sessionDir?: string) {
+      const next = ptySession(session, true)
+      const existing = findSessionTerminal(store.all, next)
+      if (existing) {
+        setStore("active", existing.id)
+        return existing.id
+      }
+      this.new(next, sessionDir)
+      return
     },
     next() {
       const index = store.all.findIndex((x) => x.id === store.active)
@@ -439,12 +466,13 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: () => workspace().new(),
+      new: (session?: string, sessionDir?: string) => workspace().new(session, sessionDir),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       open: (id: string) => workspace().open(id),
+      openSession: (session?: string, sessionDir?: string) => workspace().openSession(session, sessionDir),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
       next: () => workspace().next(),

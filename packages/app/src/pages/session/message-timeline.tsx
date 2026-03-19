@@ -216,6 +216,7 @@ export function MessageTimeline(props: {
   onLoadEarlier: () => void
   renderedUserMessages: UserMessage[]
   anchor: (id: string) => string
+  onSwitchTerminal?: () => void
 }) {
   let touchGesture: number | undefined
 
@@ -737,6 +738,20 @@ export function MessageTimeline(props: {
                   <Show when={sessionID()}>
                     {(id) => (
                       <div class="shrink-0 flex items-center gap-3">
+                        <Show when={props.onSwitchTerminal}>
+                          {(switchTerminal) => (
+                            <Button
+                              variant="secondary"
+                              size="normal"
+                              icon="console"
+                              class="shrink-0"
+                              data-action="session-switch-terminal"
+                              onClick={switchTerminal()}
+                            >
+                              {language.t("session.switch.terminal")}
+                            </Button>
+                          )}
+                        </Show>
                         <SessionContextUsage placement="bottom" />
                         <DropdownMenu
                           gutter={4}

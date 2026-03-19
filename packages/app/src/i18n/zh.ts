@@ -875,6 +875,8 @@ export const dict = {
   "session.header.open.app.textmate": "TextMate",
   "session.header.open.app.antigravity": "Antigravity",
   "session.header.open.app.terminal": "终端",
+  "session.switch.terminal": "打开终端",
+  "session.switch.chat": "返回聊天",
   "session.header.open.app.iterm2": "iTerm2",
   "session.header.open.app.ghostty": "Ghostty",
   "session.header.open.app.warp": "Warp",
