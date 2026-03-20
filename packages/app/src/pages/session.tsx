@@ -47,7 +47,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
-import { syncQwenSession } from "@/pages/session/session-switch"
+import { setSurface } from "@/pages/session/session-switch"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
@@ -1657,19 +1657,30 @@ export default function Page() {
     if (!id) return
     terminal.openSession(id, info()?.directory)
     view().terminal.close()
-    view().surface.set("terminal")
+    void setSurface({
+      current: surface(),
+      next: "terminal",
+      sessionID: id,
+      url: sdk.url,
+      set: (next) => view().surface.set(next),
+    })
   }
 
   const switchChat = async () => {
     const id = params.id
     if (!id) return
     try {
-      await syncQwenSession({
+      await setSurface({
+        current: surface(),
+        next: "chat",
         url: sdk.url,
         sessionID: id,
+        set: (next) => view().surface.set(next),
+        after: async () => {
+          await sync.session.sync(id, { force: true })
+          await sync.session.todo(id, { force: true })
+        },
       })
-      await sync.session.sync(id, { force: true })
-      await sync.session.todo(id, { force: true })
     } catch (error) {
       showToast({
         title: language.t("common.requestFailed"),
@@ -1678,7 +1689,6 @@ export default function Page() {
       return
     }
     view().terminal.close()
-    view().surface.set("chat")
   }
 
   return (
