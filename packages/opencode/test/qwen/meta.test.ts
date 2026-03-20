@@ -88,8 +88,9 @@ test("qwenProvider - keeps configured models in separate families", async () => 
   expect(provider.models["qwen3.5-plus"]?.family).toBe("qwen3.5-plus")
 })
 
-test("qwenProvider - uses HOME env by default", async () => {
+test("qwenProvider - uses HOME env when OPENCODE_TEST_HOME is absent", async () => {
   await using tmp = await tmpdir({})
+  const test = process.env.OPENCODE_TEST_HOME
   const prev = process.env.HOME
   await mkdir(path.join(tmp.path, ".qwen"), { recursive: true })
   await Bun.write(
@@ -104,14 +105,47 @@ test("qwenProvider - uses HOME env by default", async () => {
     }),
   )
 
+  delete process.env.OPENCODE_TEST_HOME
   process.env.HOME = tmp.path
   const provider = qwenProvider()
 
   expect(Object.keys(provider.models)).toEqual(["env-model"])
   expect(String(qwenDefaultModel(provider))).toBe("env-model")
 
+  if (test === undefined) delete process.env.OPENCODE_TEST_HOME
+  else process.env.OPENCODE_TEST_HOME = test
   if (prev === undefined) delete process.env.HOME
   else process.env.HOME = prev
+})
+
+test("qwenProvider - prefers OPENCODE_TEST_HOME when present", async () => {
+  await using tmp = await tmpdir({})
+  const test = process.env.OPENCODE_TEST_HOME
+  const home = process.env.HOME
+  await mkdir(path.join(tmp.path, ".qwen"), { recursive: true })
+  await Bun.write(
+    path.join(tmp.path, ".qwen", "settings.json"),
+    JSON.stringify({
+      modelProviders: {
+        openai: [{ id: "test-home-model" }],
+      },
+      model: {
+        name: "test-home-model",
+      },
+    }),
+  )
+
+  process.env.OPENCODE_TEST_HOME = tmp.path
+  process.env.HOME = path.join(tmp.path, "other-home")
+  const provider = qwenProvider()
+
+  expect(Object.keys(provider.models)).toEqual(["test-home-model"])
+  expect(String(qwenDefaultModel(provider))).toBe("test-home-model")
+
+  if (test === undefined) delete process.env.OPENCODE_TEST_HOME
+  else process.env.OPENCODE_TEST_HOME = test
+  if (home === undefined) delete process.env.HOME
+  else process.env.HOME = home
 })
 
 test("parseQwenTodos - parses todo_write result display", () => {

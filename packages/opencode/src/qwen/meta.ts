@@ -7,8 +7,8 @@ import type { Question } from "@/question"
 import type { MessageV2 } from "@/session/message-v2"
 import type { Todo } from "@/session/todo"
 import { existsSync, readFileSync } from "fs"
-import os from "os"
 import path from "path"
+import { qwenHome } from "./session"
 
 export const QWEN_PROVIDER = "qwen"
 export const QWEN_MODEL = "coder-model"
@@ -42,17 +42,16 @@ function load(file: string): Settings {
 }
 
 function settings(input?: Paths) {
-  const env =
-    input?.home ??
-    (() => {
-      try {
-        return Env.get("HOME")
-      } catch {
-        return
-      }
-    })() ??
-    process.env.HOME
-  const home = env ?? os.homedir()
+  const env = input?.home
+    ? input.home
+    : (() => {
+        try {
+          return process.env.OPENCODE_TEST_HOME ?? Env.get("HOME")
+        } catch {
+          return process.env.OPENCODE_TEST_HOME
+        }
+      })()
+  const home = qwenHome(env)
   const user = load(path.join(home, ".qwen", "settings.json"))
   if (!input?.dir) return user
   const project = load(path.join(input.dir, ".qwen", "settings.json"))

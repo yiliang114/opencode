@@ -3,9 +3,14 @@ import { beforeAll, describe, expect, mock, test } from "bun:test"
 let getWorkspaceTerminalCacheKey: (dir: string) => string
 let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
 let migrateTerminalState: (value: unknown) => unknown
+let findSessionTerminal: (
+  all: Array<{ id: string; session?: string }>,
+  session?: string,
+) => { id: string; session?: string } | undefined
 let terminalInput: (input: {
   dir: string
   cwd?: string
+  sessionDir?: string
   number: number
   session?: string
   link?: boolean
@@ -21,6 +26,7 @@ let qwenInput: (dir: string, number: number, session?: string) => {
   cwd: string
   env?: Record<string, string>
 }
+let ptySession: (session?: string, reuse?: boolean) => string | undefined
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
@@ -37,8 +43,10 @@ beforeAll(async () => {
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
+  findSessionTerminal = mod.findSessionTerminal
   terminalInput = mod.terminalInput
   qwenInput = mod.qwenInput
+  ptySession = mod.ptySession
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {
@@ -122,6 +130,34 @@ describe("qwenInput", () => {
   })
 })
 
+describe("ptySession", () => {
+  test("does not bind a session for fresh terminals", () => {
+    expect(ptySession("ses_123")).toBeUndefined()
+  })
+
+  test("reuses the session only for explicit resume flows", () => {
+    expect(ptySession("ses_123", true)).toBe("ses_123")
+  })
+})
+
+describe("findSessionTerminal", () => {
+  test("returns the matching terminal for the current session", () => {
+    expect(
+      findSessionTerminal(
+        [
+          { id: "pty_1", session: "ses_a" },
+          { id: "pty_2", session: "ses_b" },
+        ],
+        "ses_b",
+      ),
+    ).toEqual({ id: "pty_2", session: "ses_b" })
+  })
+
+  test("returns undefined when no session-bound terminal exists", () => {
+    expect(findSessionTerminal([{ id: "pty_1", session: "ses_a" }], "ses_c")).toBeUndefined()
+  })
+})
+
 describe("terminalInput", () => {
   test("creates an independent terminal by default", () => {
     expect(
@@ -135,6 +171,26 @@ describe("terminalInput", () => {
       title: "Qwen 4",
       command: "qwen",
       cwd: "/repo",
+    })
+  })
+
+  test("prefers the session directory for resume flows", () => {
+    expect(
+      terminalInput({
+        dir: "/repo",
+        cwd: "/repo",
+        sessionDir: "/repo/.worktrees/feature",
+        number: 4,
+        session: "ses_123",
+        link: true,
+      }),
+    ).toEqual({
+      title: "Qwen 4",
+      command: "qwen",
+      cwd: "/repo/.worktrees/feature",
+      env: {
+        OPENCODE_SESSION_ID: "ses_123",
+      },
     })
   })
 

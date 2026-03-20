@@ -130,13 +130,17 @@ export namespace Pty {
       }).flatMap(([key, value]) => (typeof value === "string" ? [[key, value]] : [])),
     ) as Record<string, string>
 
-    if (input.command === "qwen" || input.command?.endsWith("sh")) {
-      delete env.NO_COLOR
-    }
-
     if (input.command === "qwen") {
+      env.NO_COLOR = ""
+      env.COLORTERM = "truecolor"
+      env.CLICOLOR_FORCE = "1"
       env.FORCE_COLOR = "1"
       env.NODE_NO_WARNINGS = "1"
+      env.TERM_PROGRAM = "ghostty"
+    }
+
+    if (input.command?.endsWith("sh")) {
+      env.NO_COLOR = ""
     }
 
     if (process.platform === "win32") {

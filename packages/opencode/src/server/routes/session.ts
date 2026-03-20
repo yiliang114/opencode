@@ -17,6 +17,7 @@ import { Log } from "../../util/log"
 import { PermissionNext } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
+import { QwenSync } from "@/qwen/sync"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -183,6 +184,40 @@ export const SessionRoutes = lazy(() =>
         const sessionID = c.req.valid("param").sessionID
         const todos = await Todo.get(sessionID)
         return c.json(todos)
+      },
+    )
+    .post(
+      "/:sessionID/qwen/sync",
+      describeRoute({
+        summary: "Sync Qwen session tail",
+        description: "Import terminal-side Qwen conversation tail back into the current OpenCode session.",
+        operationId: "session.qwen.sync",
+        responses: {
+          200: {
+            description: "Sync result",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    imported: z.number(),
+                    total: z.number(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "param",
+        z.object({
+          sessionID: SessionID.zod,
+        }),
+      ),
+      async (c) => {
+        const sessionID = c.req.valid("param").sessionID
+        return c.json(await QwenSync.run(sessionID))
       },
     )
     .post(

@@ -1,4 +1,4 @@
-import { type HexColor, resolveThemeVariant, useTheme, withAlpha } from "@opencode-ai/ui/theme"
+import { resolveThemeVariant, useTheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -13,6 +13,7 @@ import type { LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { terminalTheme } from "./terminal-theme"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -36,28 +37,6 @@ const loadGhostty = () => {
       throw err
     })
   return shared
-}
-
-type TerminalColors = {
-  background: string
-  foreground: string
-  cursor: string
-  selectionBackground: string
-}
-
-const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
-  light: {
-    background: "#fcfcfc",
-    foreground: "#211e1e",
-    cursor: "#211e1e",
-    selectionBackground: withAlpha("#211e1e", 0.2),
-  },
-  dark: {
-    background: "#191515",
-    foreground: "#d4d4d4",
-    cursor: "#d4d4d4",
-    selectionBackground: withAlpha("#d4d4d4", 0.25),
-  },
 }
 
 const debugTerminal = (...values: unknown[]) => {
@@ -225,25 +204,18 @@ export const Terminal = (props: TerminalProps) => {
       })
   }
 
-  const getTerminalColors = (): TerminalColors => {
+  const getTerminalColors = () => {
     const mode = theme.mode() === "dark" ? "dark" : "light"
-    const fallback = DEFAULT_TERMINAL_COLORS[mode]
     const currentTheme = theme.themes()[theme.themeId()]
-    if (!currentTheme) return fallback
+    if (!currentTheme) return terminalTheme({ mode })
     const variant = mode === "dark" ? currentTheme.dark : currentTheme.light
-    if (!variant?.seeds && !variant?.palette) return fallback
+    if (!variant?.seeds && !variant?.palette) return terminalTheme({ mode })
     const resolved = resolveThemeVariant(variant, mode === "dark")
-    const text = resolved["text-stronger"] ?? fallback.foreground
-    const background = resolved["background-stronger"] ?? fallback.background
-    const alpha = mode === "dark" ? 0.25 : 0.2
-    const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
-    const selectionBackground = withAlpha(base, alpha)
-    return {
-      background,
-      foreground: text,
-      cursor: text,
-      selectionBackground,
-    }
+    return terminalTheme({
+      mode,
+      foreground: resolved["text-stronger"],
+      background: resolved["background-stronger"],
+    })
   }
 
   const terminalColors = createMemo(getTerminalColors)

@@ -2,6 +2,7 @@ import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "sol
 import { createStore } from "solid-js/store"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
+import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -18,9 +19,13 @@ import { terminalTabLabel } from "@/pages/session/terminal-label"
 import { createSizing, focusTerminalById } from "@/pages/session/helpers"
 import { getTerminalHandoff, setTerminalHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
+import { emptyTerminalAction } from "@/pages/session/terminal-surface"
 import { terminalProbe } from "@/testing/terminal"
 
-export function TerminalPanel() {
+export function TerminalPanel(props: {
+  full?: boolean
+  onSwitchChat?: () => void
+} = {}) {
   const delays = [120, 240]
   const layout = useLayout()
   const terminal = useTerminal()
@@ -28,10 +33,13 @@ export function TerminalPanel() {
   const command = useCommand()
   const { params, view } = useSessionLayout()
 
-  const opened = createMemo(() => view().terminal.opened())
+  const opened = createMemo(() => !!props.full || view().terminal.opened())
   const size = createSizing()
   const height = createMemo(() => layout.terminal.height())
-  const close = () => view().terminal.close()
+  const close = () => {
+    if (props.full) return
+    view().terminal.close()
+  }
   let root: HTMLDivElement | undefined
 
   const [store, setStore] = createStore({
@@ -75,6 +83,10 @@ export function TerminalPanel() {
       (count, prevCount) => {
         if (prevCount === undefined || prevCount <= 0 || count !== 0) return
         if (!opened()) return
+        if (emptyTerminalAction({ full: props.full }) === "chat") {
+          props.onSwitchChat?.()
+          return
+        }
         close()
       },
     ),
@@ -191,22 +203,26 @@ export function TerminalPanel() {
       aria-label={language.t("terminal.title")}
       aria-hidden={!opened()}
       inert={!opened()}
-      class="relative w-full shrink-0 overflow-hidden bg-background-stronger"
+      class="relative overflow-hidden bg-background-stronger"
       classList={{
+        "w-full shrink-0": !props.full,
+        "size-full min-h-0": !!props.full,
         "border-t border-border-weak-base": opened(),
         "transition-[height] duration-200 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[height] motion-reduce:transition-none":
-          !size.active(),
+          !props.full && !size.active(),
       }}
-      style={{ height: opened() ? `${pane()}px` : "0px" }}
+      style={{ height: props.full ? "100%" : opened() ? `${pane()}px` : "0px" }}
     >
       <div
-        class="absolute inset-x-0 top-0 flex flex-col"
+        class="flex flex-col"
         classList={{
+          "absolute inset-x-0 top-0": !props.full,
+          "size-full": !!props.full,
           "pointer-events-none": !opened(),
         }}
-        style={{ height: `${pane()}px` }}
+        style={{ height: props.full ? "100%" : `${pane()}px` }}
       >
-        <div class="hidden md:block" onPointerDown={() => size.start()}>
+        <div class={props.full ? "hidden" : "hidden md:block"} onPointerDown={() => size.start()}>
           <ResizeHandle
             direction="vertical"
             size={pane()}
@@ -262,6 +278,20 @@ export function TerminalPanel() {
                     <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
+                    <Show when={props.onSwitchChat}>
+                      {(switchChat) => (
+                        <Button
+                          variant="secondary"
+                          size="normal"
+                          icon="bubble-5"
+                          class="mr-2 shrink-0"
+                          data-action="session-switch-chat"
+                          onClick={switchChat()}
+                        >
+                          {language.t("session.switch.chat")}
+                        </Button>
+                      )}
+                    </Show>
                     <TooltipKeybind
                       title={language.t("command.terminal.new")}
                       keybind={command.keybind("terminal.new")}

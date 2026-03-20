@@ -41,6 +41,7 @@ type SessionView = {
   reviewOpen?: string[]
   pendingMessage?: string
   pendingMessageAt?: number
+  surface?: "chat" | "terminal"
 }
 
 type TabHandoff = {
@@ -790,6 +791,22 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             },
             toggle() {
               setReviewPanelOpened(!reviewPanelOpened())
+            },
+          },
+          surface: {
+            current: createMemo(() => s().surface ?? "chat"),
+            set(next: "chat" | "terminal") {
+              const session = key()
+              const current = store.sessionView[session]
+              if (!current) {
+                setStore("sessionView", session, {
+                  scroll: {},
+                  surface: next,
+                })
+                return
+              }
+              if (current.surface === next) return
+              setStore("sessionView", session, "surface", next)
             },
           },
           review: {

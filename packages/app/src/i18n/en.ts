@@ -584,6 +584,8 @@ export const dict = {
   "session.header.open.app.textmate": "TextMate",
   "session.header.open.app.antigravity": "Antigravity",
   "session.header.open.app.terminal": "Terminal",
+  "session.switch.terminal": "Open Terminal",
+  "session.switch.chat": "Back to Chat",
   "session.header.open.app.iterm2": "iTerm2",
   "session.header.open.app.ghostty": "Ghostty",
   "session.header.open.app.warp": "Warp",

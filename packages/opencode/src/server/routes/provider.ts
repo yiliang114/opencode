@@ -10,6 +10,7 @@ import { mapValues } from "remeda"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 import { qwenDefaultModel, qwenProvider } from "@/qwen/meta"
+import { Instance } from "@/project/instance"
 
 export const ProviderRoutes = lazy(() =>
   new Hono()
@@ -37,11 +38,11 @@ export const ProviderRoutes = lazy(() =>
         },
       }),
       async (c) => {
-        const qwen = qwenProvider()
+        const qwen = qwenProvider({ dir: Instance.directory })
         if (Object.keys(qwen.models).length > 0) {
           return c.json({
             all: [qwen],
-            default: { [qwen.id]: qwenDefaultModel(qwen) },
+            default: { [qwen.id]: qwenDefaultModel(qwen, { dir: Instance.directory }) },
             connected: [qwen.id],
           })
         }
