@@ -18,6 +18,7 @@ import { PermissionNext } from "@/permission"
 import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { QwenSync } from "@/qwen/sync"
+import { listQwenSessions } from "@/qwen/list"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -91,6 +92,46 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const result = SessionStatus.list()
         return c.json(result)
+      },
+    )
+    .get(
+      "/qwen",
+      describeRoute({
+        summary: "List Qwen sessions",
+        description: "List Qwen Code sessions discovered from local chat files for the requested workspace.",
+        operationId: "session.qwen.list",
+        responses: {
+          200: {
+            description: "List of Qwen sessions",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.array(
+                    z.object({
+                      id: z.string(),
+                      title: z.string(),
+                      cwd: z.string(),
+                      start: z.number(),
+                      updated: z.number(),
+                      messageCount: z.number(),
+                    }),
+                  ),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "query",
+        z.object({
+          directory: z.string().meta({ description: "Workspace directory to scan for Qwen chat files" }),
+        }),
+      ),
+      async (c) => {
+        const query = c.req.valid("query")
+        return c.json(await listQwenSessions({ dir: query.directory }))
       },
     )
     .get(

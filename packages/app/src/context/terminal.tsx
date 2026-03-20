@@ -1,6 +1,6 @@
 import { createStore, produce } from "solid-js/store"
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, createSignal, on, onCleanup } from "solid-js"
 import { useParams } from "@solidjs/router"
 import { useSDK } from "./sdk"
 import type { Platform } from "./platform"
@@ -12,6 +12,7 @@ export type LocalPTY = {
   title: string
   titleNumber: number
   session?: string
+  qwen?: string
   rows?: number
   cols?: number
   buffer?: string
@@ -43,19 +44,41 @@ export function findSessionTerminal<T extends { session?: string }>(all: T[], se
   return all.find((pty) => pty.session === session)
 }
 
+export function findQwenTerminal<T extends { qwen?: string }>(all: T[], qwen?: string) {
+  if (!qwen) return
+  return all.find((pty) => pty.qwen === qwen)
+}
+
 function qwenTitle(number: number) {
   return `Qwen ${number}`
 }
 
-export function qwenInput(dir: string, number: number, session?: string) {
+export function shellInput(dir: string, number: number) {
   return {
-    title: qwenTitle(number),
-    command: "qwen",
+    title: defaultTitle(number),
     cwd: dir,
-    ...(session
+  }
+}
+
+export function qwenInput(input: {
+  dir: string
+  number: number
+  session?: string
+  qwen?: string
+}) {
+  return {
+    title: qwenTitle(input.number),
+    command: "qwen",
+    cwd: input.dir,
+    ...(input.qwen
+      ? {
+          args: ["--resume", input.qwen],
+        }
+      : {}),
+    ...(input.session
       ? {
           env: {
-            OPENCODE_SESSION_ID: session,
+            OPENCODE_SESSION_ID: input.session,
           },
         }
       : {}),
@@ -74,8 +97,24 @@ export function terminalInput(input: {
   number: number
   session?: string
   link?: boolean
+  qwen?: string
 }) {
-  return qwenInput(input.sessionDir || input.cwd || input.dir, input.number, ptySession(input.session, input.link))
+  const dir = input.sessionDir || input.cwd || input.dir
+  if (input.qwen) {
+    return qwenInput({
+      dir,
+      number: input.number,
+      qwen: input.qwen,
+    })
+  }
+  if (input.link) {
+    return qwenInput({
+      dir,
+      number: input.number,
+      session: ptySession(input.session, input.link),
+    })
+  }
+  return shellInput(dir, input.number)
 }
 
 function pty(value: unknown): LocalPTY | undefined {
@@ -87,6 +126,7 @@ function pty(value: unknown): LocalPTY | undefined {
   const title = text(value.title) ?? ""
   const number = num(value.titleNumber)
   const session = text(value.session)
+  const qwen = text(value.qwen)
   const rows = num(value.rows)
   const cols = num(value.cols)
   const buffer = text(value.buffer)
@@ -98,6 +138,7 @@ function pty(value: unknown): LocalPTY | undefined {
     title,
     titleNumber: number && number > 0 ? number : (numberFromTitle(title) ?? 0),
     ...(session !== undefined ? { session } : {}),
+    ...(qwen !== undefined ? { qwen } : {}),
     ...(rows !== undefined ? { rows } : {}),
     ...(cols !== undefined ? { cols } : {}),
     ...(buffer !== undefined ? { buffer } : {}),
@@ -181,6 +222,7 @@ function createWorkspaceTerminalSession(
   legacySessionID?: string,
 ) {
   const legacy = getLegacyTerminalStorageKeys(dir, legacySessionID)
+  const [pending, setPending] = createSignal(0)
 
   const [store, setStore, _, ready] = persisted(
     {
@@ -236,6 +278,7 @@ function createWorkspaceTerminalSession(
 
   return {
     ready,
+    creating: createMemo(() => pending()),
     all: createMemo(() => store.all),
     active: createMemo(() => store.active),
     clear() {
@@ -244,9 +287,10 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new(input?: { link?: boolean; session?: string; sessionDir?: string }) {
+    new(input?: { link?: boolean; session?: string; sessionDir?: string; qwen?: string }) {
       const nextNumber = pickNextTerminalNumber()
       const next = ptySession(input?.session ?? id(), input?.link)
+      setPending((value) => value + 1)
 
       sdk.client.pty
         .create(
@@ -257,6 +301,7 @@ function createWorkspaceTerminalSession(
             number: nextNumber,
             session: input?.session ?? id(),
             link: input?.link,
+            qwen: input?.qwen,
           }),
         )
         .then((pty: { data?: { id?: string; title?: string } }) => {
@@ -264,15 +309,19 @@ function createWorkspaceTerminalSession(
           if (!id) return
           const newTerminal = {
             id,
-            title: pty.data?.title ?? qwenTitle(nextNumber),
+            title: pty.data?.title ?? (input?.link || input?.qwen ? qwenTitle(nextNumber) : defaultTitle(nextNumber)),
             titleNumber: nextNumber,
-            session: next,
+            ...(next ? { session: next } : {}),
+            ...(input?.qwen ? { qwen: input.qwen } : {}),
           }
           setStore("all", store.all.length, newTerminal)
           setStore("active", id)
         })
         .catch((error: unknown) => {
           console.error("Failed to create terminal", error)
+        })
+        .finally(() => {
+          setPending((value) => Math.max(0, value - 1))
         })
     },
     update(pty: Partial<LocalPTY> & { id: string }) {
@@ -353,6 +402,18 @@ function createWorkspaceTerminalSession(
       this.new({
         link: true,
         session,
+        sessionDir,
+      })
+      return
+    },
+    openQwen(qwen: string, sessionDir?: string) {
+      const existing = findQwenTerminal(store.all, qwen)
+      if (existing) {
+        setStore("active", existing.id)
+        return existing.id
+      }
+      this.new({
+        qwen,
         sessionDir,
       })
       return
@@ -470,15 +531,17 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
 
     return {
       ready: () => workspace().ready(),
+      creating: () => workspace().creating(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: (input?: { link?: boolean; session?: string; sessionDir?: string }) => workspace().new(input),
+      new: (input?: { link?: boolean; session?: string; sessionDir?: string; qwen?: string }) => workspace().new(input),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       open: (id: string) => workspace().open(id),
       openSession: (session?: string, sessionDir?: string) => workspace().openSession(session, sessionDir),
+      openQwen: (qwen: string, sessionDir?: string) => workspace().openQwen(qwen, sessionDir),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
       next: () => workspace().next(),

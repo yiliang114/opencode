@@ -7,6 +7,10 @@ let findSessionTerminal: (
   all: Array<{ id: string; session?: string }>,
   session?: string,
 ) => { id: string; session?: string } | undefined
+let findQwenTerminal: (
+  all: Array<{ id: string; qwen?: string }>,
+  qwen?: string,
+) => { id: string; qwen?: string } | undefined
 let terminalInput: (input: {
   dir: string
   cwd?: string
@@ -14,16 +18,23 @@ let terminalInput: (input: {
   number: number
   session?: string
   link?: boolean
+  qwen?: string
 }) => {
   title: string
-  command: string
   cwd: string
+  command?: string
+  args?: string[]
   env?: Record<string, string>
 }
-let qwenInput: (dir: string, number: number, session?: string) => {
+let shellInput: (dir: string, number: number) => {
+  title: string
+  cwd: string
+}
+let qwenInput: (input: { dir: string; number: number; session?: string; qwen?: string }) => {
   title: string
   command: string
   cwd: string
+  args?: string[]
   env?: Record<string, string>
 }
 let ptySession: (session?: string, reuse?: boolean) => string | undefined
@@ -44,7 +55,9 @@ beforeAll(async () => {
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
   findSessionTerminal = mod.findSessionTerminal
+  findQwenTerminal = mod.findQwenTerminal
   terminalInput = mod.terminalInput
+  shellInput = mod.shellInput
   qwenInput = mod.qwenInput
   ptySession = mod.ptySession
 })
@@ -109,9 +122,23 @@ describe("migrateTerminalState", () => {
   })
 })
 
+describe("shellInput", () => {
+  test("creates a plain shell terminal payload", () => {
+    expect(shellInput("/repo", 2)).toEqual({
+      title: "Terminal 2",
+      cwd: "/repo",
+    })
+  })
+})
+
 describe("qwenInput", () => {
   test("creates a qwen terminal payload without session bridge by default", () => {
-    expect(qwenInput("/repo", 2)).toEqual({
+    expect(
+      qwenInput({
+        dir: "/repo",
+        number: 2,
+      }),
+    ).toEqual({
       title: "Qwen 2",
       command: "qwen",
       cwd: "/repo",
@@ -119,13 +146,34 @@ describe("qwenInput", () => {
   })
 
   test("includes the current session id for qwen bridge", () => {
-    expect(qwenInput("/repo", 3, "ses_123")).toEqual({
+    expect(
+      qwenInput({
+        dir: "/repo",
+        number: 3,
+        session: "ses_123",
+      }),
+    ).toEqual({
       title: "Qwen 3",
       command: "qwen",
       cwd: "/repo",
       env: {
         OPENCODE_SESSION_ID: "ses_123",
       },
+    })
+  })
+
+  test("resumes a raw qwen session id without the opencode bridge", () => {
+    expect(
+      qwenInput({
+        dir: "/repo",
+        number: 4,
+        qwen: "qwen_123",
+      }),
+    ).toEqual({
+      title: "Qwen 4",
+      command: "qwen",
+      cwd: "/repo",
+      args: ["--resume", "qwen_123"],
     })
   })
 })
@@ -158,6 +206,24 @@ describe("findSessionTerminal", () => {
   })
 })
 
+describe("findQwenTerminal", () => {
+  test("returns the matching terminal for a qwen session id", () => {
+    expect(
+      findQwenTerminal(
+        [
+          { id: "pty_1", qwen: "qwen_a" },
+          { id: "pty_2", qwen: "qwen_b" },
+        ],
+        "qwen_b",
+      ),
+    ).toEqual({ id: "pty_2", qwen: "qwen_b" })
+  })
+
+  test("returns undefined when no qwen-bound terminal exists", () => {
+    expect(findQwenTerminal([{ id: "pty_1", qwen: "qwen_a" }], "qwen_c")).toBeUndefined()
+  })
+})
+
 describe("terminalInput", () => {
   test("creates an independent terminal by default", () => {
     expect(
@@ -168,8 +234,7 @@ describe("terminalInput", () => {
         session: "ses_123",
       }),
     ).toEqual({
-      title: "Qwen 4",
-      command: "qwen",
+      title: "Terminal 4",
       cwd: "/repo",
     })
   })
@@ -191,6 +256,22 @@ describe("terminalInput", () => {
       env: {
         OPENCODE_SESSION_ID: "ses_123",
       },
+    })
+  })
+
+  test("resumes a raw qwen session when requested", () => {
+    expect(
+      terminalInput({
+        dir: "/repo",
+        cwd: "/repo",
+        number: 5,
+        qwen: "qwen_123",
+      }),
+    ).toEqual({
+      title: "Qwen 5",
+      command: "qwen",
+      cwd: "/repo",
+      args: ["--resume", "qwen_123"],
     })
   })
 
@@ -220,8 +301,7 @@ describe("terminalInput", () => {
         number: 1,
       }),
     ).toEqual({
-      title: "Qwen 1",
-      command: "qwen",
+      title: "Terminal 1",
       cwd: "/repo",
     })
   })

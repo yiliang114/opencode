@@ -72,8 +72,9 @@ export function TerminalPanel(props: {
       return
     }
 
-    if (!terminal.ready() || terminal.all().length !== 0 || store.autoCreated) return
-    terminal.new({ link: true })
+    if (props.full) return
+    if (!terminal.ready() || terminal.creating() > 0 || terminal.all().length !== 0 || store.autoCreated) return
+    terminal.new()
     setStore("autoCreated", true)
   })
 

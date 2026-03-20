@@ -1,5 +1,5 @@
-import { useNavigate, useParams } from "@solidjs/router"
-import { createEffect, createMemo, For, Show, type Accessor, type JSX } from "solid-js"
+import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { createEffect, createMemo, For, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { createMediaQuery } from "@solid-primitives/media"
@@ -15,7 +15,10 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Session } from "@opencode-ai/sdk/v2/client"
 import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
+import { useTerminal } from "@/context/terminal"
+import { QwenSession, qwenHref, qwenListUrl } from "@/pages/session/qwen-route"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { childMapByParent, sortedRootSessions } from "./helpers"
 
@@ -54,6 +57,88 @@ export type WorkspaceSidebarContext = {
   showResetWorkspaceDialog: (root: string, directory: string) => void
   showDeleteWorkspaceDialog: (root: string, directory: string) => void
   setScrollContainerRef: (el: HTMLDivElement | undefined, mobile?: boolean) => void
+}
+
+function createQwenSessions(dir: Accessor<string>, live: Accessor<boolean>) {
+  const globalSdk = useGlobalSDK()
+  const [store, setStore] = createStore({
+    loading: false,
+    all: [] as QwenSession[],
+  })
+  let run = 0
+
+  const load = async () => {
+    const next = ++run
+    if (store.all.length === 0) setStore("loading", true)
+    try {
+      const result = await fetch(qwenListUrl(globalSdk.url, dir()))
+      if (!result.ok) return
+      const data = (await result.json()) as QwenSession[]
+      if (next !== run) return
+      setStore("all", data)
+    } catch (error) {
+      if (next !== run) return
+      console.error("Failed to load qwen sessions", error)
+    } finally {
+      if (next !== run) return
+      setStore("loading", false)
+    }
+  }
+
+  createEffect(() => {
+    if (!live()) return
+    if (typeof window === "undefined") return
+    void load()
+    const timer = window.setInterval(() => {
+      void load()
+    }, 5000)
+    onCleanup(() => clearInterval(timer))
+  })
+
+  return {
+    loading: () => store.loading,
+    all: () => store.all,
+    load,
+  }
+}
+
+const QwenSessionItem = (props: {
+  slug: string
+  session: QwenSession
+  mobile?: boolean
+}) => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const params = useParams()
+  const terminal = useTerminal()
+  const active = createMemo(
+    () => params.dir === props.slug && new URLSearchParams(location.search).get("qwen") === props.session.id,
+  )
+
+  return (
+    <button
+      type="button"
+      class="group/session relative w-full rounded-md cursor-default pl-2 pr-3 transition-colors text-left hover:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
+      onClick={() => {
+        terminal.openQwen(props.session.id, props.session.cwd)
+        navigate(qwenHref(props.slug, props.session.id, props.session.cwd))
+      }}
+    >
+      <div
+        class="flex items-center gap-3 min-w-0 w-full py-1 focus:outline-none"
+        classList={{
+          active: active(),
+        }}
+      >
+        <div class="flex items-center justify-center shrink-0 size-6 rounded-md bg-surface-raised-base text-12-medium text-text-weak">
+          Q
+        </div>
+        <div class="min-w-0 flex-1">
+          <div class="truncate text-14-medium text-text-base">{props.session.title}</div>
+        </div>
+      </div>
+    </button>
+  )
 }
 
 export const WorkspaceDragOverlay = (props: {
@@ -244,6 +329,8 @@ const WorkspaceSessionList = (props: {
   showNew: Accessor<boolean>
   loading: Accessor<boolean>
   sessions: Accessor<Session[]>
+  qwen: Accessor<QwenSession[]>
+  qwenLoading: Accessor<boolean>
   children: Accessor<Map<string, string[]>>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
@@ -261,6 +348,12 @@ const WorkspaceSessionList = (props: {
     </Show>
     <Show when={props.loading()}>
       <SessionSkeleton />
+    </Show>
+    <Show when={props.qwenLoading() || props.qwen().length > 0}>
+      <div class="px-3 pt-2 pb-1 text-11-medium uppercase tracking-wide text-text-weak">Qwen</div>
+      <For each={props.qwen()}>
+        {(session) => <QwenSessionItem slug={props.slug()} mobile={props.mobile} session={session} />}
+      </For>
     </Show>
     <For each={props.sessions()}>
       {(session) => (
@@ -338,6 +431,10 @@ export const SortableWorkspace = (props: {
   const loading = createMemo(() => open() && !booted() && sessions().length === 0 && !wasBusy())
   const touch = createMediaQuery("(hover: none)")
   const showNew = createMemo(() => !loading() && (touch() || sessions().length === 0 || (active() && !params.id)))
+  const qwen = createQwenSessions(
+    () => props.directory,
+    () => open() || active(),
+  )
   const loadMore = async () => {
     setWorkspaceStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.directory)
@@ -444,6 +541,8 @@ export const SortableWorkspace = (props: {
             showNew={showNew}
             loading={loading}
             sessions={sessions}
+            qwen={qwen.all}
+            qwenLoading={qwen.loading}
             children={children}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -474,6 +573,10 @@ export const LocalWorkspace = (props: {
   const booted = createMemo((prev) => prev || workspace().store.status === "complete", false)
   const loading = createMemo(() => !booted() && sessions().length === 0)
   const hasMore = createMemo(() => workspace().store.sessionTotal > sessions().length)
+  const qwen = createQwenSessions(
+    () => props.project.worktree,
+    () => true,
+  )
   const loadMore = async () => {
     workspace().setStore("limit", (limit) => (limit ?? 0) + 5)
     await globalSync.project.loadSessions(props.project.worktree)
@@ -492,6 +595,8 @@ export const LocalWorkspace = (props: {
         showNew={() => false}
         loading={loading}
         sessions={sessions}
+        qwen={qwen.all}
+        qwenLoading={qwen.loading}
         children={children}
         hasMore={hasMore}
         loadMore={loadMore}

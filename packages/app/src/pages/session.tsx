@@ -47,6 +47,7 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
+import { terminalPage } from "@/pages/session/qwen-route"
 import { setSurface } from "@/pages/session/session-switch"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
@@ -312,22 +313,36 @@ export default function Page() {
   const prompt = usePrompt()
   const comments = useComments()
   const terminal = useTerminal()
-  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string }>()
-  const { params, sessionKey, tabs, view } = useSessionLayout()
+  const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string; qwen?: string; cwd?: string }>()
+  const { params, qwen, sessionKey, tabs, view } = useSessionLayout()
   const surface = createMemo(() => view().surface.current())
-  const terminalMode = createMemo(() => !!params.id && surface() === "terminal")
+  const qwenMode = createMemo(() => !!qwen())
+  const terminalMode = createMemo(() => qwenMode() || terminalPage({ surface: surface(), id: params.id, qwen: qwen() }))
 
   createEffect(() => {
     if (!untrack(() => prompt.ready())) return
     prompt.ready()
     untrack(() => {
-      if (params.id || !prompt.ready()) return
+      if (params.id || qwen() || !prompt.ready()) return
       const text = searchParams.prompt
       if (!text) return
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
       setSearchParams({ ...searchParams, prompt: undefined })
     })
   })
+
+  createEffect(
+    on(
+      () => [qwen(), searchParams.cwd] as const,
+      ([id, cwd]) => {
+        if (!id) return
+        terminal.openQwen(id, cwd || sdk.directory)
+        if (surface() === "terminal") return
+        view().surface.set("terminal")
+      },
+      { defer: true },
+    ),
+  )
 
   const [ui, setUi] = createStore({
     git: false,
@@ -1691,6 +1706,12 @@ export default function Page() {
     view().terminal.close()
   }
 
+  const exitQwen = () => {
+    const dir = params.dir
+    if (!dir) return
+    navigate(`/${dir}/session`)
+  }
+
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
       <SessionHeader />
@@ -1734,7 +1755,7 @@ export default function Page() {
           <div class="flex-1 min-h-0 overflow-hidden">
             <Switch>
               <Match when={terminalMode()}>
-                <TerminalPanel full onSwitchChat={() => void switchChat()} />
+                <TerminalPanel full onSwitchChat={() => (params.id ? void switchChat() : exitQwen())} />
               </Match>
               <Match when={params.id}>
                 <Show when={lastUserMessage()}>
