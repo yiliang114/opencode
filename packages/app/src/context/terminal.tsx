@@ -61,8 +61,9 @@ export function terminalInput(input: {
   cwd?: string
   number: number
   session?: string
+  link?: boolean
 }) {
-  return qwenInput(input.cwd || input.dir, input.number, input.session)
+  return qwenInput(input.cwd || input.dir, input.number, input.link ? input.session : undefined)
 }
 
 function pty(value: unknown): LocalPTY | undefined {
@@ -229,7 +230,7 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new() {
+    new(input?: { link?: boolean }) {
       const nextNumber = pickNextTerminalNumber()
 
       sdk.client.pty
@@ -239,6 +240,7 @@ function createWorkspaceTerminalSession(
             cwd: cwd(),
             number: nextNumber,
             session: id(),
+            link: input?.link,
           }),
         )
         .then((pty: { data?: { id?: string; title?: string } }) => {
@@ -439,7 +441,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: () => workspace().new(),
+      new: (input?: { link?: boolean }) => workspace().new(input),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),

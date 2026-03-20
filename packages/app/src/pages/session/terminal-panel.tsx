@@ -65,7 +65,7 @@ export function TerminalPanel() {
     }
 
     if (!terminal.ready() || terminal.all().length !== 0 || store.autoCreated) return
-    terminal.new()
+    terminal.new({ link: true })
     setStore("autoCreated", true)
   })
 
@@ -271,7 +271,7 @@ export function TerminalPanel() {
                         icon="plus-small"
                         variant="ghost"
                         iconSize="large"
-                        onClick={terminal.new}
+                        onClick={() => terminal.new()}
                         aria-label={language.t("command.terminal.new")}
                       />
                     </TooltipKeybind>

@@ -8,6 +8,7 @@ let terminalInput: (input: {
   cwd?: string
   number: number
   session?: string
+  link?: boolean
 }) => {
   title: string
   command: string
@@ -122,7 +123,7 @@ describe("qwenInput", () => {
 })
 
 describe("terminalInput", () => {
-  test("prefers the resolved sdk directory over the route slug", () => {
+  test("creates an independent terminal by default", () => {
     expect(
       terminalInput({
         dir: "L3JvdXRlLXNsdWc",
@@ -132,6 +133,22 @@ describe("terminalInput", () => {
       }),
     ).toEqual({
       title: "Qwen 4",
+      command: "qwen",
+      cwd: "/repo",
+    })
+  })
+
+  test("links the current session when requested", () => {
+    expect(
+      terminalInput({
+        dir: "/repo",
+        cwd: "/repo",
+        number: 3,
+        session: "ses_123",
+        link: true,
+      }),
+    ).toEqual({
+      title: "Qwen 3",
       command: "qwen",
       cwd: "/repo",
       env: {
