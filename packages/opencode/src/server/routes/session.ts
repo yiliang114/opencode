@@ -19,6 +19,7 @@ import { PermissionID } from "@/permission/schema"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { QwenSync } from "@/qwen/sync"
 import { listQwenSessions } from "@/qwen/list"
+import { linkQwen } from "@/qwen/link"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -109,6 +110,7 @@ export const SessionRoutes = lazy(() =>
                   z.array(
                     z.object({
                       id: z.string(),
+                      sessionID: SessionID.zod.optional(),
                       title: z.string(),
                       cwd: z.string(),
                       start: z.number(),
@@ -132,6 +134,36 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         return c.json(await listQwenSessions({ dir: query.directory }))
+      },
+    )
+    .post(
+      "/qwen/link",
+      describeRoute({
+        summary: "Create or reuse a linked OpenCode session for a raw Qwen chat",
+        description: "Materialize a raw Qwen Code chat as an OpenCode session so chat and terminal share one session entry.",
+        operationId: "session.qwen.link",
+        responses: {
+          200: {
+            description: "Linked session",
+            content: {
+              "application/json": {
+                schema: resolver(Session.Info),
+              },
+            },
+          },
+          ...errors(400, 404),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          directory: z.string(),
+          qwen: z.string(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        return c.json(await linkQwen({ dir: body.directory, qwen: body.qwen }))
       },
     )
     .get(

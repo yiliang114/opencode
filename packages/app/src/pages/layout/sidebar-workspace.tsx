@@ -1,6 +1,6 @@
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, For, onCleanup, Show, type Accessor, type JSX } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { createSortable } from "@thisbeyond/solid-dnd"
 import { createMediaQuery } from "@solid-primitives/media"
 import { base64Encode } from "@opencode-ai/util/encode"
@@ -17,8 +17,12 @@ import { type LocalProject } from "@/context/layout"
 import { useGlobalSync } from "@/context/global-sync"
 import { useGlobalSDK } from "@/context/global-sdk"
 import { useLanguage } from "@/context/language"
-import { useTerminal } from "@/context/terminal"
-import { QwenSession, qwenHref, qwenListUrl } from "@/pages/session/qwen-route"
+import { ensureQwenSession, QwenSession, qwenListUrl, qwenTarget } from "@/pages/session/qwen-route"
+import { syncBeforeNavigate } from "@/pages/session/session-switch"
+import { showToast } from "@opencode-ai/ui/toast"
+import { formatServerError } from "@/utils/server-errors"
+import { filterQwen } from "./qwen-filter"
+import { useSidebarSync } from "./sidebar-sync"
 import { NewSessionItem, SessionItem, SessionSkeleton } from "./sidebar-items"
 import { childMapByParent, sortedRootSessions } from "./helpers"
 
@@ -75,7 +79,7 @@ function createQwenSessions(dir: Accessor<string>, live: Accessor<boolean>) {
       if (!result.ok) return
       const data = (await result.json()) as QwenSession[]
       if (next !== run) return
-      setStore("all", data)
+      setStore("all", reconcile(data, { key: "id" }))
     } catch (error) {
       if (next !== run) return
       console.error("Failed to load qwen sessions", error)
@@ -98,21 +102,32 @@ function createQwenSessions(dir: Accessor<string>, live: Accessor<boolean>) {
   return {
     loading: () => store.loading,
     all: () => store.all,
+    link(id: string, sessionID: string) {
+      const idx = store.all.findIndex((item) => item.id === id)
+      if (idx === -1) return
+      setStore("all", idx, "sessionID", sessionID)
+    },
     load,
   }
 }
 
 const QwenSessionItem = (props: {
+  directory: string
   slug: string
   session: QwenSession
+  link: (id: string, sessionID: string) => void
   mobile?: boolean
 }) => {
   const navigate = useNavigate()
   const location = useLocation()
   const params = useParams()
-  const terminal = useTerminal()
+  const nav = useSidebarSync()
+  const language = useLanguage()
   const active = createMemo(
-    () => params.dir === props.slug && new URLSearchParams(location.search).get("qwen") === props.session.id,
+    () =>
+      params.dir === props.slug &&
+      new URLSearchParams(location.search).get("qwen") === props.session.id &&
+      (!props.session.sessionID || params.id === props.session.sessionID),
   )
 
   return (
@@ -120,8 +135,44 @@ const QwenSessionItem = (props: {
       type="button"
       class="group/session relative w-full rounded-md cursor-default pl-2 pr-3 transition-colors text-left hover:bg-surface-raised-base-hover has-[.active]:bg-surface-base-active"
       onClick={() => {
-        terminal.openQwen(props.session.id, props.session.cwd)
-        navigate(qwenHref(props.slug, props.session.id, props.session.cwd))
+        Promise.resolve()
+          .then(async () => {
+            const nextSessionID =
+              props.session.sessionID ??
+              (await ensureQwenSession({
+                url: nav.url,
+                dir: props.directory,
+                qwen: props.session.id,
+              }))
+
+            if (!props.session.sessionID) {
+              props.link(props.session.id, nextSessionID)
+              await nav.reload(nextSessionID)
+            }
+
+            await syncBeforeNavigate({
+              surface: nav.surface(),
+              currentSessionID: params.id,
+              nextSessionID,
+              url: nav.url,
+              after: nav.reload,
+            })
+
+            navigate(
+              qwenTarget({
+                dir: props.slug,
+                qwen: props.session.id,
+                cwd: props.session.cwd,
+                sessionID: nextSessionID,
+              }),
+            )
+          })
+          .catch((error) => {
+            showToast({
+              title: language.t("common.requestFailed"),
+              description: formatServerError(error, language.t),
+            })
+          })
       }}
     >
       <div
@@ -322,6 +373,7 @@ const WorkspaceActions = (props: {
 )
 
 const WorkspaceSessionList = (props: {
+  directory: string
   slug: Accessor<string>
   mobile?: boolean
   popover?: boolean
@@ -331,68 +383,86 @@ const WorkspaceSessionList = (props: {
   sessions: Accessor<Session[]>
   qwen: Accessor<QwenSession[]>
   qwenLoading: Accessor<boolean>
+  linkQwen: (id: string, sessionID: string) => void
   children: Accessor<Map<string, string[]>>
   hasMore: Accessor<boolean>
   loadMore: () => Promise<void>
   language: ReturnType<typeof useLanguage>
-}): JSX.Element => (
-  <nav class="flex flex-col gap-1">
-    <Show when={props.showNew()}>
-      <NewSessionItem
-        slug={props.slug()}
-        mobile={props.mobile}
-        sidebarExpanded={props.ctx.sidebarExpanded}
-        clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-        setHoverSession={props.ctx.setHoverSession}
-      />
-    </Show>
-    <Show when={props.loading()}>
-      <SessionSkeleton />
-    </Show>
-    <Show when={props.qwenLoading() || props.qwen().length > 0}>
-      <div class="px-3 pt-2 pb-1 text-11-medium uppercase tracking-wide text-text-weak">Qwen</div>
-      <For each={props.qwen()}>
-        {(session) => <QwenSessionItem slug={props.slug()} mobile={props.mobile} session={session} />}
-      </For>
-    </Show>
-    <For each={props.sessions()}>
-      {(session) => (
-        <SessionItem
-          session={session}
-          list={props.sessions()}
-          navList={props.ctx.navList}
+}): JSX.Element => {
+  const all = createMemo(() =>
+    filterQwen({
+      all: props.qwen(),
+      sessions: props.sessions(),
+    }),
+  )
+
+  return (
+    <nav class="flex flex-col gap-1">
+      <Show when={props.showNew()}>
+        <NewSessionItem
           slug={props.slug()}
           mobile={props.mobile}
-          popover={props.popover}
-          children={props.children()}
           sidebarExpanded={props.ctx.sidebarExpanded}
-          sidebarHovering={props.ctx.sidebarHovering}
-          nav={props.ctx.nav}
-          hoverSession={props.ctx.hoverSession}
-          setHoverSession={props.ctx.setHoverSession}
           clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
-          prefetchSession={props.ctx.prefetchSession}
-          archiveSession={props.ctx.archiveSession}
+          setHoverSession={props.ctx.setHoverSession}
         />
-      )}
-    </For>
-    <Show when={props.hasMore()}>
-      <div class="relative w-full py-1">
-        <Button
-          variant="ghost"
-          class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
-          size="large"
-          onClick={(e: MouseEvent) => {
-            props.loadMore()
-            ;(e.currentTarget as HTMLButtonElement).blur()
-          }}
-        >
-          {props.language.t("common.loadMore")}
-        </Button>
-      </div>
-    </Show>
-  </nav>
-)
+      </Show>
+      <Show when={props.loading()}>
+        <SessionSkeleton />
+      </Show>
+      <Show when={props.qwenLoading() || all().length > 0}>
+        <div class="px-3 pt-2 pb-1 text-11-medium uppercase tracking-wide text-text-weak">Qwen</div>
+        <For each={all()}>
+          {(session) => (
+            <QwenSessionItem
+              directory={props.directory}
+              slug={props.slug()}
+              mobile={props.mobile}
+              session={session}
+              link={props.linkQwen}
+            />
+          )}
+        </For>
+      </Show>
+      <For each={props.sessions()}>
+        {(session) => (
+          <SessionItem
+            session={session}
+            list={props.sessions()}
+            navList={props.ctx.navList}
+            slug={props.slug()}
+            mobile={props.mobile}
+            popover={props.popover}
+            children={props.children()}
+            sidebarExpanded={props.ctx.sidebarExpanded}
+            sidebarHovering={props.ctx.sidebarHovering}
+            nav={props.ctx.nav}
+            hoverSession={props.ctx.hoverSession}
+            setHoverSession={props.ctx.setHoverSession}
+            clearHoverProjectSoon={props.ctx.clearHoverProjectSoon}
+            prefetchSession={props.ctx.prefetchSession}
+            archiveSession={props.ctx.archiveSession}
+          />
+        )}
+      </For>
+      <Show when={props.hasMore()}>
+        <div class="relative w-full py-1">
+          <Button
+            variant="ghost"
+            class="flex w-full text-left justify-start text-14-regular text-text-weak pl-9 pr-10"
+            size="large"
+            onClick={(e: MouseEvent) => {
+              props.loadMore()
+              ;(e.currentTarget as HTMLButtonElement).blur()
+            }}
+          >
+            {props.language.t("common.loadMore")}
+          </Button>
+        </div>
+      </Show>
+    </nav>
+  )
+}
 
 export const SortableWorkspace = (props: {
   ctx: WorkspaceSidebarContext
@@ -534,6 +604,7 @@ export const SortableWorkspace = (props: {
 
         <Collapsible.Content>
           <WorkspaceSessionList
+            directory={props.directory}
             slug={slug}
             mobile={props.mobile}
             popover={props.popover}
@@ -543,6 +614,7 @@ export const SortableWorkspace = (props: {
             sessions={sessions}
             qwen={qwen.all}
             qwenLoading={qwen.loading}
+            linkQwen={qwen.link}
             children={children}
             hasMore={hasMore}
             loadMore={loadMore}
@@ -588,6 +660,7 @@ export const LocalWorkspace = (props: {
       class="size-full flex flex-col py-2 overflow-y-auto no-scrollbar [overflow-anchor:none]"
     >
       <WorkspaceSessionList
+        directory={props.project.worktree}
         slug={slug}
         mobile={props.mobile}
         popover={props.popover}
@@ -597,6 +670,7 @@ export const LocalWorkspace = (props: {
         sessions={sessions}
         qwen={qwen.all}
         qwenLoading={qwen.loading}
+        linkQwen={qwen.link}
         children={children}
         hasMore={hasMore}
         loadMore={loadMore}

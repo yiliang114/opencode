@@ -46,6 +46,7 @@ import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
+import { guessSize } from "@/pages/session/terminal-size"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { terminalPage } from "@/pages/session/qwen-route"
 import { setSurface } from "@/pages/session/session-switch"
@@ -336,7 +337,7 @@ export default function Page() {
       () => [qwen(), searchParams.cwd] as const,
       ([id, cwd]) => {
         if (!id) return
-        terminal.openQwen(id, cwd || sdk.directory)
+        terminal.openQwen(id, cwd || sdk.directory, terminalSize())
         if (surface() === "terminal") return
         view().surface.set("terminal")
       },
@@ -1670,7 +1671,7 @@ export default function Page() {
   const switchTerminal = () => {
     const id = params.id
     if (!id) return
-    terminal.openSession(id, info()?.directory)
+    terminal.openSession(id, info()?.directory, terminalSize())
     view().terminal.close()
     void setSurface({
       current: surface(),
@@ -1679,6 +1680,12 @@ export default function Page() {
       url: sdk.url,
       set: (next) => view().surface.set(next),
     })
+  }
+
+  const terminalSize = () => {
+    const width = scroller?.clientWidth ?? window.innerWidth
+    const height = scroller?.clientHeight ?? window.innerHeight
+    return guessSize({ width, height })
   }
 
   const switchChat = async () => {
@@ -1714,7 +1721,7 @@ export default function Page() {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      <SessionHeader />
+      <SessionHeader onSwitchTerminal={params.id ? switchTerminal : undefined} />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">
@@ -1798,7 +1805,6 @@ export default function Page() {
                     }}
                     renderedUserMessages={historyWindow.renderedUserMessages()}
                     anchor={anchor}
-                    onSwitchTerminal={switchTerminal}
                   />
                 </Show>
               </Match>

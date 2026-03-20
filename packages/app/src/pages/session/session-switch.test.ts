@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { nextSurface, qwenSyncUrl, setSurface, syncQwenSession } from "./session-switch"
+import { nextSurface, qwenSyncUrl, setSurface, shouldSyncOnNavigate, syncBeforeNavigate, syncQwenSession } from "./session-switch"
 
 describe("qwenSyncUrl", () => {
   test("builds the qwen sync endpoint from the current server url", () => {
@@ -87,5 +87,78 @@ describe("setSurface", () => {
 
     expect(sync).not.toHaveBeenCalled()
     expect(set).toHaveBeenCalledWith("terminal")
+  })
+})
+
+describe("shouldSyncOnNavigate", () => {
+  test("syncs when leaving a terminal-backed opencode session", () => {
+    expect(
+      shouldSyncOnNavigate({
+        surface: "terminal",
+        currentSessionID: "ses_123",
+        nextSessionID: "ses_456",
+      }),
+    ).toBe(true)
+  })
+
+  test("does not sync when staying on the same session", () => {
+    expect(
+      shouldSyncOnNavigate({
+        surface: "terminal",
+        currentSessionID: "ses_123",
+        nextSessionID: "ses_123",
+      }),
+    ).toBe(false)
+  })
+
+  test("does not sync outside terminal mode", () => {
+    expect(
+      shouldSyncOnNavigate({
+        surface: "chat",
+        currentSessionID: "ses_123",
+        nextSessionID: "ses_456",
+      }),
+    ).toBe(false)
+  })
+})
+
+describe("syncBeforeNavigate", () => {
+  test("syncs and refreshes before leaving the current terminal session", async () => {
+    const calls: string[] = []
+    const sync = mock(async () => {
+      calls.push("sync")
+      return { imported: 1, total: 2 }
+    })
+
+    await expect(
+      syncBeforeNavigate({
+        surface: "terminal",
+        currentSessionID: "ses_123",
+        nextSessionID: "ses_456",
+        url: "http://127.0.0.1:4096/",
+        sync: sync as unknown as typeof syncQwenSession,
+        after: async (sessionID) => {
+          calls.push(`after:${sessionID}`)
+        },
+      }),
+    ).resolves.toBe(true)
+
+    expect(calls).toEqual(["sync", "after:ses_123"])
+  })
+
+  test("skips sync when the target is the same session", async () => {
+    const sync = mock(async () => ({ imported: 0, total: 0 }))
+
+    await expect(
+      syncBeforeNavigate({
+        surface: "terminal",
+        currentSessionID: "ses_123",
+        nextSessionID: "ses_123",
+        url: "http://127.0.0.1:4096/",
+        sync: sync as unknown as typeof syncQwenSession,
+      }),
+    ).resolves.toBe(false)
+
+    expect(sync).not.toHaveBeenCalled()
   })
 })

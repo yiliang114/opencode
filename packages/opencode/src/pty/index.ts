@@ -9,6 +9,7 @@ import { Shell } from "@/shell/shell"
 import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { qwenSessionArgs } from "@/qwen/session"
+import { qwenAuthArgs } from "@/qwen/auth"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -59,6 +60,12 @@ export namespace Pty {
     cwd: z.string().optional(),
     title: z.string().optional(),
     env: z.record(z.string(), z.string()).optional(),
+    size: z
+      .object({
+        rows: z.number(),
+        cols: z.number(),
+      })
+      .optional(),
   })
 
   export type CreateInput = z.infer<typeof CreateInput>
@@ -164,14 +171,23 @@ export namespace Pty {
     const env = input.env ? { ...input.env } : undefined
     const sid = command === "qwen" ? env?.OPENCODE_SESSION_ID : undefined
     if (env?.OPENCODE_SESSION_ID) delete env.OPENCODE_SESSION_ID
+    const auth =
+      command === "qwen" && !raw.includes("--auth-type")
+        ? await qwenAuthArgs({
+            env: {
+              ...process.env,
+              ...env,
+            },
+          })
+        : []
     const args =
       command === "qwen" &&
       sid &&
       !raw.includes("--continue") &&
       !raw.includes("--resume") &&
       !raw.includes("--session-id")
-        ? [...(await qwenSessionArgs({ dir: cwd, id: sid })), ...raw]
-        : raw
+        ? [...auth, ...(await qwenSessionArgs({ dir: cwd, id: sid })), ...raw]
+        : [...auth, ...raw]
     if (command.endsWith("sh")) args.push("-l")
     const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
     const vars = ptyEnv({
@@ -187,6 +203,12 @@ export namespace Pty {
       name: "xterm-256color",
       cwd,
       env: vars,
+      ...(input.size
+        ? {
+            cols: input.size.cols,
+            rows: input.size.rows,
+          }
+        : {}),
     })
 
     const info = {

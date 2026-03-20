@@ -6,6 +6,7 @@ import { IconButton } from "@opencode-ai/ui/icon-button"
 import { MessageNav } from "@opencode-ai/ui/message-nav"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
 import { A, useNavigate, useParams } from "@solidjs/router"
@@ -16,8 +17,11 @@ import { getAvatarColors, type LocalProject, useLayout } from "@/context/layout"
 import { useNotification } from "@/context/notification"
 import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
+import { formatServerError } from "@/utils/server-errors"
+import { syncBeforeNavigate } from "../session/session-switch"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
+import { useSidebarSync } from "./sidebar-sync"
 
 const OPENCODE_PROJECT_ID = "4b0ea68d7af9a6031a7ffda7ad66e0cb83315750"
 
@@ -101,6 +105,7 @@ const SessionRow = (props: {
   warmPress: () => void
   warmFocus: () => void
   cancelHoverPrefetch: () => void
+  onNavigate?: (event: MouseEvent) => void
 }): JSX.Element => (
   <A
     href={`/${props.slug}/session/${props.session.id}`}
@@ -109,10 +114,11 @@ const SessionRow = (props: {
     onPointerEnter={props.warmHover}
     onPointerLeave={props.cancelHoverPrefetch}
     onFocus={props.warmFocus}
-    onClick={() => {
+    onClick={(event) => {
       props.setHoverSession(undefined)
       if (props.sidebarOpened()) return
       props.clearHoverProjectSoon()
+      props.onNavigate?.(event)
     }}
   >
     <div class="flex items-center gap-1 w-full">
@@ -191,6 +197,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const navigate = useNavigate()
   const layout = useLayout()
   const language = useLanguage()
+  const nav = useSidebarSync()
   const notification = useNotification()
   const permission = usePermission()
   const globalSync = useGlobalSync()
@@ -274,6 +281,25 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
     return text?.text
   }
+  const href = `/${props.slug}/session/${props.session.id}`
+  const open = (hash?: string) => {
+    void syncBeforeNavigate({
+      surface: nav.surface(),
+      currentSessionID: params.id,
+      nextSessionID: props.session.id,
+      url: nav.url,
+      after: nav.reload,
+    })
+      .then(() => {
+        navigate(hash ? `${href}${hash}` : href)
+      })
+      .catch((error) => {
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: formatServerError(error, language.t),
+        })
+      })
+  }
   const item = (
     <SessionRow
       session={props.session}
@@ -292,6 +318,11 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
       warmPress={() => warm(2, "high")}
       warmFocus={() => warm(2, "high")}
       cancelHoverPrefetch={cancelHoverPrefetch}
+      onNavigate={(event) => {
+        if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+        event.preventDefault()
+        open()
+      }}
     />
   )
 
@@ -326,7 +357,7 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
             if (!isActive())
               layout.pendingMessage.set(`${base64Encode(props.session.directory)}/${props.session.id}`, message.id)
 
-            navigate(`${props.slug}/session/${props.session.id}#message-${message.id}`)
+            open(`#message-${message.id}`)
           }}
           trigger={item}
         />

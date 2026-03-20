@@ -1,10 +1,15 @@
 import path from "path"
 import { readdir } from "fs/promises"
 import type { QwenItem } from "./sync"
-import { qwenHome } from "./session"
+import { linkedSession } from "./map"
+import { qwenChatPath, qwenHome, qwenProject } from "./session"
+import { Session } from "@/session"
+
+export { findSessionID } from "./map"
 
 export type QwenSession = {
   id: string
+  sessionID?: string
   title: string
   cwd: string
   start: number
@@ -13,7 +18,7 @@ export type QwenSession = {
 }
 
 function chats(dir: string, home?: string) {
-  return path.join(qwenHome(home), ".qwen", "projects", dir.replace(/[^a-zA-Z0-9]/g, "-"), "chats")
+  return path.join(qwenHome(home), ".qwen", "projects", qwenProject(dir), "chats")
 }
 
 function rows(text: string) {
@@ -48,8 +53,29 @@ function title(items: QwenItem[]) {
   return "Untitled Session"
 }
 
-async function read(file: string, id: string, dir: string) {
-  const items = rows(await Bun.file(file).text())
+export async function qwenInfo(input: {
+  dir: string
+  id: string
+  home?: string
+  sessions?: string[]
+}) {
+  const sessions =
+    input.sessions ??
+    (() => {
+      try {
+        return Array.from(Session.list({ directory: input.dir }), (session) => session.id)
+      } catch {
+        return []
+      }
+    })()
+  const file = qwenChatPath({
+    dir: input.dir,
+    id: input.id,
+    home: input.home,
+  })
+  const chat = Bun.file(file)
+  if (!(await chat.exists())) return
+  const items = rows(await chat.text())
   if (items.length === 0) return
   const times = items.flatMap((item) => {
     const out = time(item.timestamp)
@@ -59,9 +85,14 @@ async function read(file: string, id: string, dir: string) {
   const updated = times.at(-1)
   if (start === undefined || updated === undefined) return
   return {
-    id,
+    id: input.id,
+    sessionID: await linkedSession({
+      dir: input.dir,
+      qwen: input.id,
+      sessions,
+    }),
     title: title(items),
-    cwd: items.find((item) => item.cwd)?.cwd ?? dir,
+    cwd: items.find((item) => item.cwd)?.cwd ?? input.dir,
     start,
     updated,
     messageCount: items.length,
@@ -71,8 +102,18 @@ async function read(file: string, id: string, dir: string) {
 export async function listQwenSessions(input: {
   dir: string
   home?: string
+  sessions?: string[]
 }) {
   const dir = chats(input.dir, input.home)
+  const sessions =
+    input.sessions ??
+    (() => {
+      try {
+        return Array.from(Session.list({ directory: input.dir }), (session) => session.id)
+      } catch {
+        return []
+      }
+    })()
   let files: string[]
   try {
     files = await readdir(dir)
@@ -82,7 +123,14 @@ export async function listQwenSessions(input: {
   const list = await Promise.all(
     files
       .filter((file) => file.endsWith(".jsonl"))
-      .map((file) => read(path.join(dir, file), file.slice(0, -".jsonl".length), input.dir)),
+      .map((file) =>
+        qwenInfo({
+          dir: input.dir,
+          id: file.slice(0, -".jsonl".length),
+          home: input.home,
+          sessions,
+        }),
+      ),
   )
   return list
     .flatMap((item) => (item ? [item] : []))

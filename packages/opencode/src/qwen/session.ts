@@ -10,7 +10,7 @@ function hash(dir: string) {
   return createHash("sha256").update(norm(dir)).digest("hex")
 }
 
-function project(dir: string) {
+export function qwenProject(dir: string) {
   return norm(dir).replace(/[^a-zA-Z0-9]/g, "-")
 }
 
@@ -20,6 +20,14 @@ type Row = {
 
 export function qwenHome(home?: string) {
   return home ?? process.env.OPENCODE_TEST_HOME ?? process.env.HOME ?? os.homedir()
+}
+
+export function qwenChatPath(input: {
+  dir: string
+  id: string
+  home?: string
+}) {
+  return path.join(qwenHome(input.home), ".qwen", "projects", qwenProject(input.dir), "chats", `${input.id}.jsonl`)
 }
 
 export function qwenSessionID(id: string) {
@@ -37,7 +45,7 @@ export async function qwenSessionArgs(input: {
 }) {
   if (!input.id) return []
   const sid = qwenSessionID(input.id)
-  const file = Bun.file(path.join(qwenHome(input.home), ".qwen", "projects", project(input.dir), "chats", `${sid}.jsonl`))
+  const file = Bun.file(qwenChatPath({ dir: input.dir, id: sid, home: input.home }))
   if (!(await file.exists())) return ["--session-id", sid]
 
   const line = (await file.text()).split("\n", 1)[0]?.trim()

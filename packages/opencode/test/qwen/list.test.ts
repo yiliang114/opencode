@@ -69,6 +69,7 @@ describe("listQwenSessions", () => {
     ).resolves.toEqual([
       {
         id: "22222222-2222-4222-8222-222222222222",
+        sessionID: undefined,
         title: "second prompt",
         cwd: dir,
         start: Date.parse("2026-03-20T00:02:00.000Z"),
@@ -77,6 +78,7 @@ describe("listQwenSessions", () => {
       },
       {
         id: "11111111-1111-4111-8111-111111111111",
+        sessionID: undefined,
         title: "first prompt",
         cwd: dir,
         start: Date.parse("2026-03-20T00:00:00.000Z"),

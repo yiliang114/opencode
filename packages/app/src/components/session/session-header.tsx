@@ -24,6 +24,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
+import { showSwitchTerminal } from "./session-header-state"
 
 const OPEN_APPS = [
   "vscode",
@@ -128,7 +129,9 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-export function SessionHeader() {
+export function SessionHeader(props: {
+  onSwitchTerminal?: () => void
+}) {
   const layout = useLayout()
   const command = useCommand()
   const server = useServer()
@@ -151,6 +154,7 @@ export function SessionHeader() {
   })
   const hotkey = createMemo(() => command.keybind("file.open"))
   const os = createMemo(() => detectOS(platform))
+  const surface = createMemo(() => view().surface.current())
 
   const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
     finder: true,
@@ -223,6 +227,13 @@ export function SessionHeader() {
   const opening = createMemo(() => openRequest.app !== undefined)
   const tint = createMemo(() =>
     messageAgentColor(params.id ? sync.data.message[params.id] : undefined, sync.data.agent),
+  )
+  const canSwitch = createMemo(() =>
+    showSwitchTerminal({
+      id: params.id,
+      surface: surface(),
+      action: props.onSwitchTerminal,
+    }),
   )
 
   const selectApp = (app: OpenApp) => {
@@ -415,6 +426,19 @@ export function SessionHeader() {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
+                <Show when={canSwitch()}>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    icon="console"
+                    class="shrink-0 min-w-0"
+                    data-action="session-switch-terminal"
+                    onClick={() => props.onSwitchTerminal?.()}
+                    aria-label={language.t("session.switch.terminal")}
+                  >
+                    <span class="max-md:hidden">{language.t("session.switch.terminal")}</span>
+                  </Button>
+                </Show>
                 <Tooltip placement="bottom" value={language.t("status.popover.trigger")}>
                   <StatusPopover />
                 </Tooltip>

@@ -19,23 +19,55 @@ let terminalInput: (input: {
   session?: string
   link?: boolean
   qwen?: string
+  size?: {
+    cols: number
+    rows: number
+  }
 }) => {
   title: string
   cwd: string
   command?: string
   args?: string[]
   env?: Record<string, string>
+  size?: {
+    cols: number
+    rows: number
+  }
 }
-let shellInput: (dir: string, number: number) => {
+let shellInput: (
+  dir: string,
+  number: number,
+  size?: {
+    cols: number
+    rows: number
+  },
+) => {
   title: string
   cwd: string
+  size?: {
+    cols: number
+    rows: number
+  }
 }
-let qwenInput: (input: { dir: string; number: number; session?: string; qwen?: string }) => {
+let qwenInput: (input: {
+  dir: string
+  number: number
+  session?: string
+  qwen?: string
+  size?: {
+    cols: number
+    rows: number
+  }
+}) => {
   title: string
   command: string
   cwd: string
   args?: string[]
   env?: Record<string, string>
+  size?: {
+    cols: number
+    rows: number
+  }
 }
 let ptySession: (session?: string, reuse?: boolean) => string | undefined
 
@@ -129,6 +161,22 @@ describe("shellInput", () => {
       cwd: "/repo",
     })
   })
+
+  test("includes an initial size when provided", () => {
+    expect(
+      shellInput("/repo", 2, {
+        cols: 120,
+        rows: 32,
+      }),
+    ).toEqual({
+      title: "Terminal 2",
+      cwd: "/repo",
+      size: {
+        cols: 120,
+        rows: 32,
+      },
+    })
+  })
 })
 
 describe("qwenInput", () => {
@@ -174,6 +222,31 @@ describe("qwenInput", () => {
       command: "qwen",
       cwd: "/repo",
       args: ["--resume", "qwen_123"],
+    })
+  })
+
+  test("passes through an initial size when provided", () => {
+    expect(
+      qwenInput({
+        dir: "/repo",
+        number: 4,
+        session: "ses_123",
+        size: {
+          cols: 96,
+          rows: 28,
+        },
+      }),
+    ).toEqual({
+      title: "Qwen 4",
+      command: "qwen",
+      cwd: "/repo",
+      env: {
+        OPENCODE_SESSION_ID: "ses_123",
+      },
+      size: {
+        cols: 96,
+        rows: 28,
+      },
     })
   })
 })
@@ -303,6 +376,33 @@ describe("terminalInput", () => {
     ).toEqual({
       title: "Terminal 1",
       cwd: "/repo",
+    })
+  })
+
+  test("passes an initial size through to linked qwen terminals", () => {
+    expect(
+      terminalInput({
+        dir: "/repo",
+        cwd: "/repo",
+        number: 3,
+        session: "ses_123",
+        link: true,
+        size: {
+          cols: 110,
+          rows: 30,
+        },
+      }),
+    ).toEqual({
+      title: "Qwen 3",
+      command: "qwen",
+      cwd: "/repo",
+      env: {
+        OPENCODE_SESSION_ID: "ses_123",
+      },
+      size: {
+        cols: 110,
+        rows: 30,
+      },
     })
   })
 })

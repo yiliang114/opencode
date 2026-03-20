@@ -2188,6 +2188,10 @@ export type PtyCreateData = {
     env?: {
       [key: string]: string
     }
+    size?: {
+      rows: number
+      cols: number
+    }
   }
   path?: never
   query?: {
@@ -2829,6 +2833,80 @@ export type SessionStatusResponses = {
 
 export type SessionStatusResponse = SessionStatusResponses[keyof SessionStatusResponses]
 
+export type SessionQwenListData = {
+  body?: never
+  path?: never
+  query: {
+    /**
+     * Workspace directory to scan for Qwen chat files
+     */
+    directory: string
+    workspace?: string
+  }
+  url: "/session/qwen"
+}
+
+export type SessionQwenListErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+}
+
+export type SessionQwenListError = SessionQwenListErrors[keyof SessionQwenListErrors]
+
+export type SessionQwenListResponses = {
+  /**
+   * List of Qwen sessions
+   */
+  200: Array<{
+    id: string
+    sessionID?: string
+    title: string
+    cwd: string
+    start: number
+    updated: number
+    messageCount: number
+  }>
+}
+
+export type SessionQwenListResponse = SessionQwenListResponses[keyof SessionQwenListResponses]
+
+export type SessionQwenLinkData = {
+  body?: {
+    directory: string
+    qwen: string
+  }
+  path?: never
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/qwen/link"
+}
+
+export type SessionQwenLinkErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionQwenLinkError = SessionQwenLinkErrors[keyof SessionQwenLinkErrors]
+
+export type SessionQwenLinkResponses = {
+  /**
+   * Linked session
+   */
+  200: Session
+}
+
+export type SessionQwenLinkResponse = SessionQwenLinkResponses[keyof SessionQwenLinkResponses]
+
 export type SessionDeleteData = {
   body?: never
   path: {
@@ -3003,6 +3081,43 @@ export type SessionTodoResponses = {
 }
 
 export type SessionTodoResponse = SessionTodoResponses[keyof SessionTodoResponses]
+
+export type SessionQwenSyncData = {
+  body?: never
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/qwen/sync"
+}
+
+export type SessionQwenSyncErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * Not found
+   */
+  404: NotFoundError
+}
+
+export type SessionQwenSyncError = SessionQwenSyncErrors[keyof SessionQwenSyncErrors]
+
+export type SessionQwenSyncResponses = {
+  /**
+   * Sync result
+   */
+  200: {
+    imported: number
+    total: number
+  }
+}
+
+export type SessionQwenSyncResponse = SessionQwenSyncResponses[keyof SessionQwenSyncResponses]
 
 export type SessionInitData = {
   body?: {

@@ -1,10 +1,10 @@
-import path from "path"
 import { ModelID, ProviderID } from "@/provider/schema"
 import { Session } from "@/session"
 import type { MessageV2 } from "@/session/message-v2"
 import { MessageID, PartID, type SessionID } from "@/session/schema"
+import { linkedQwen } from "./map"
 import { QWEN_PROVIDER, qwenDefaultModel, qwenProvider } from "./meta"
-import { qwenHome, qwenSessionID } from "./session"
+import { qwenChatPath, qwenSessionID } from "./session"
 
 type QwenCall = {
   id?: string
@@ -59,14 +59,11 @@ export function qwenChatFile(input: {
   id: string
   home?: string
 }) {
-  return path.join(
-    qwenHome(input.home),
-    ".qwen",
-    "projects",
-    input.dir.replace(/[^a-zA-Z0-9]/g, "-"),
-    "chats",
-    `${qwenSessionID(input.id)}.jsonl`,
-  )
+  return qwenChatPath({
+    dir: input.dir,
+    id: qwenSessionID(input.id),
+    home: input.home,
+  })
 }
 
 function qwenText(item: QwenItem) {
@@ -271,8 +268,17 @@ export async function qwenItems(input: {
   dir: string
   id: string
   home?: string
+  raw?: boolean
 }) {
-  const file = Bun.file(qwenChatFile(input))
+  const file = Bun.file(
+    input.raw
+      ? qwenChatPath({
+          dir: input.dir,
+          id: input.id,
+          home: input.home,
+        })
+      : qwenChatFile(input),
+  )
   if (!(await file.exists())) return []
   const text = await file.text()
   const rows = text
@@ -434,11 +440,15 @@ async function qwenAssistant(input: {
 }
 
 export namespace QwenSync {
-  export async function run(sessionID: SessionID) {
+  export async function run(input: SessionID | { sessionID: SessionID; qwen?: string }) {
+    const sessionID = typeof input === "string" ? input : input.sessionID
     const session = await Session.get(sessionID)
+    const linked = typeof input === "string" ? await linkedQwen(sessionID) : undefined
+    const id = typeof input === "string" ? (linked?.qwen ?? session.id) : (input.qwen ?? session.id)
     const items = await qwenItems({
       dir: session.directory,
-      id: session.id,
+      id,
+      raw: typeof input === "string" ? !!linked?.qwen : !!input.qwen,
     })
     if (!items.length) {
       return {

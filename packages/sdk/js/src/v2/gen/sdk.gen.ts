@@ -131,6 +131,12 @@ import type {
   SessionPromptAsyncResponses,
   SessionPromptErrors,
   SessionPromptResponses,
+  SessionQwenLinkErrors,
+  SessionQwenLinkResponses,
+  SessionQwenListErrors,
+  SessionQwenListResponses,
+  SessionQwenSyncErrors,
+  SessionQwenSyncResponses,
   SessionRevertErrors,
   SessionRevertResponses,
   SessionShareErrors,
@@ -556,6 +562,10 @@ export class Pty extends HeyApiClient {
       env?: {
         [key: string]: string
       }
+      size?: {
+        rows: number
+        cols: number
+      }
     },
     options?: Options<never, ThrowOnError>,
   ) {
@@ -571,6 +581,7 @@ export class Pty extends HeyApiClient {
             { in: "body", key: "cwd" },
             { in: "body", key: "title" },
             { in: "body", key: "env" },
+            { in: "body", key: "size" },
           ],
         },
       ],
@@ -1240,6 +1251,117 @@ export class Worktree extends HeyApiClient {
         ...options?.headers,
         ...params.headers,
       },
+    })
+  }
+}
+
+export class Qwen extends HeyApiClient {
+  /**
+   * List Qwen sessions
+   *
+   * List Qwen Code sessions discovered from local chat files for the requested workspace.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters: {
+      directory: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<SessionQwenListResponses, SessionQwenListErrors, ThrowOnError>({
+      url: "/session/qwen",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create or reuse a linked OpenCode session for a raw Qwen chat
+   *
+   * Materialize a raw Qwen Code chat as an OpenCode session so chat and terminal share one session entry.
+   */
+  public link<ThrowOnError extends boolean = false>(
+    parameters?: {
+      query_directory?: string
+      workspace?: string
+      body_directory?: string
+      qwen?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            {
+              in: "query",
+              key: "query_directory",
+              map: "directory",
+            },
+            { in: "query", key: "workspace" },
+            {
+              in: "body",
+              key: "body_directory",
+              map: "directory",
+            },
+            { in: "body", key: "qwen" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionQwenLinkResponses, SessionQwenLinkErrors, ThrowOnError>({
+      url: "/session/qwen/link",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Sync Qwen session tail
+   *
+   * Import terminal-side Qwen conversation tail back into the current OpenCode session.
+   */
+  public sync<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<SessionQwenSyncResponses, SessionQwenSyncErrors, ThrowOnError>({
+      url: "/session/{sessionID}/qwen/sync",
+      ...options,
+      ...params,
     })
   }
 }
@@ -2185,6 +2307,11 @@ export class Session2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _qwen?: Qwen
+  get qwen(): Qwen {
+    return (this._qwen ??= new Qwen({ client: this.client }))
   }
 }
 

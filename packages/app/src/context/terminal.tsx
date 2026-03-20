@@ -20,6 +20,11 @@ export type LocalPTY = {
   cursor?: number
 }
 
+type Size = {
+  cols: number
+  rows: number
+}
+
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
 
@@ -53,10 +58,11 @@ function qwenTitle(number: number) {
   return `Qwen ${number}`
 }
 
-export function shellInput(dir: string, number: number) {
+export function shellInput(dir: string, number: number, size?: Size) {
   return {
     title: defaultTitle(number),
     cwd: dir,
+    ...(size ? { size } : {}),
   }
 }
 
@@ -65,11 +71,13 @@ export function qwenInput(input: {
   number: number
   session?: string
   qwen?: string
+  size?: Size
 }) {
   return {
     title: qwenTitle(input.number),
     command: "qwen",
     cwd: input.dir,
+    ...(input.size ? { size: input.size } : {}),
     ...(input.qwen
       ? {
           args: ["--resume", input.qwen],
@@ -98,6 +106,7 @@ export function terminalInput(input: {
   session?: string
   link?: boolean
   qwen?: string
+  size?: Size
 }) {
   const dir = input.sessionDir || input.cwd || input.dir
   if (input.qwen) {
@@ -105,6 +114,7 @@ export function terminalInput(input: {
       dir,
       number: input.number,
       qwen: input.qwen,
+      size: input.size,
     })
   }
   if (input.link) {
@@ -112,9 +122,10 @@ export function terminalInput(input: {
       dir,
       number: input.number,
       session: ptySession(input.session, input.link),
+      size: input.size,
     })
   }
-  return shellInput(dir, input.number)
+  return shellInput(dir, input.number, input.size)
 }
 
 function pty(value: unknown): LocalPTY | undefined {
@@ -287,7 +298,7 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new(input?: { link?: boolean; session?: string; sessionDir?: string; qwen?: string }) {
+    new(input?: { link?: boolean; session?: string; sessionDir?: string; qwen?: string; size?: Size }) {
       const nextNumber = pickNextTerminalNumber()
       const next = ptySession(input?.session ?? id(), input?.link)
       setPending((value) => value + 1)
@@ -302,6 +313,7 @@ function createWorkspaceTerminalSession(
             session: input?.session ?? id(),
             link: input?.link,
             qwen: input?.qwen,
+            size: input?.size,
           }),
         )
         .then((pty: { data?: { id?: string; title?: string } }) => {
@@ -392,7 +404,7 @@ function createWorkspaceTerminalSession(
     open(id: string) {
       setStore("active", id)
     },
-    openSession(session = id(), sessionDir?: string) {
+    openSession(session = id(), sessionDir?: string, size?: Size) {
       const next = ptySession(session, true)
       const existing = findSessionTerminal(store.all, next)
       if (existing) {
@@ -403,10 +415,11 @@ function createWorkspaceTerminalSession(
         link: true,
         session,
         sessionDir,
+        size,
       })
       return
     },
-    openQwen(qwen: string, sessionDir?: string) {
+    openQwen(qwen: string, sessionDir?: string, size?: Size) {
       const existing = findQwenTerminal(store.all, qwen)
       if (existing) {
         setStore("active", existing.id)
@@ -415,6 +428,7 @@ function createWorkspaceTerminalSession(
       this.new({
         qwen,
         sessionDir,
+        size,
       })
       return
     },
@@ -534,14 +548,16 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       creating: () => workspace().creating(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: (input?: { link?: boolean; session?: string; sessionDir?: string; qwen?: string }) => workspace().new(input),
+      new: (input?: { link?: boolean; session?: string; sessionDir?: string; qwen?: string; size?: Size }) =>
+        workspace().new(input),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),
       clone: (id: string) => workspace().clone(id),
       open: (id: string) => workspace().open(id),
-      openSession: (session?: string, sessionDir?: string) => workspace().openSession(session, sessionDir),
-      openQwen: (qwen: string, sessionDir?: string) => workspace().openQwen(qwen, sessionDir),
+      openSession: (session?: string, sessionDir?: string, size?: Size) =>
+        workspace().openSession(session, sessionDir, size),
+      openQwen: (qwen: string, sessionDir?: string, size?: Size) => workspace().openQwen(qwen, sessionDir, size),
       close: (id: string) => workspace().close(id),
       move: (id: string, to: number) => workspace().move(id, to),
       next: () => workspace().next(),

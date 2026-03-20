@@ -26,6 +26,33 @@ export async function syncQwenSession(input: {
   }
 }
 
+export function shouldSyncOnNavigate(input: {
+  surface: Surface
+  currentSessionID?: string
+  nextSessionID?: string
+}) {
+  return input.surface === "terminal" && !!input.currentSessionID && input.currentSessionID !== input.nextSessionID
+}
+
+export async function syncBeforeNavigate(input: {
+  surface: Surface
+  currentSessionID?: string
+  nextSessionID?: string
+  url: string
+  sync?: typeof syncQwenSession
+  after?: (sessionID: string) => Promise<void> | void
+}) {
+  if (!shouldSyncOnNavigate(input)) return false
+  const sessionID = input.currentSessionID
+  if (!sessionID) return false
+  await (input.sync ?? syncQwenSession)({
+    url: input.url,
+    sessionID,
+  })
+  await input.after?.(sessionID)
+  return true
+}
+
 export async function setSurface(input: {
   current: Surface
   next?: Surface
