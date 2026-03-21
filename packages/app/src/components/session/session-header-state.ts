@@ -5,3 +5,11 @@ export function showSwitchTerminal(input: {
 }) {
   return !!input.id && input.surface === "chat" && !!input.action
 }
+
+export function showSwitchChat(input: {
+  id?: string
+  surface: "chat" | "terminal"
+  action?: () => void
+}) {
+  return !!input.id && input.surface === "terminal" && !!input.action
+}

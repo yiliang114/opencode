@@ -1,7 +1,7 @@
 import { resolveThemeVariant, useTheme } from "@opencode-ai/ui/theme"
 import { showToast } from "@opencode-ai/ui/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
-import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
+import { type ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, splitProps } from "solid-js"
 import { SerializeAddon } from "@/addons/serialize"
 import { matchKeybind, parseKeybind } from "@/context/command"
 import { useLanguage } from "@/context/language"
@@ -13,7 +13,9 @@ import type { LocalPTY } from "@/context/terminal"
 import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
+import { restoreBuffer, restoreCursor } from "./terminal-restore"
 import { terminalTheme } from "./terminal-theme"
+import { terminalStyle, terminalVisible } from "./terminal-visibility"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
@@ -148,7 +150,8 @@ export const Terminal = (props: TerminalProps) => {
   const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
   const probe = terminalProbe(id)
-  const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+  const restore = restoreBuffer(local.pty)
+  const replay = !!restore
   const restoreSize =
     restore &&
     typeof local.pty.cols === "number" &&
@@ -172,14 +175,18 @@ export const Terminal = (props: TerminalProps) => {
   let lastSize: { cols: number; rows: number } | undefined
   let disposed = false
   const cleanups: VoidFunction[] = []
-  const start =
-    typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+  const start = restoreCursor({
+    replay,
+    cursor: local.pty.cursor,
+    restore,
+  })
   let cursor = start ?? 0
-  let seek = start !== undefined ? start : restore ? -1 : 0
+  let seek = start
   let output: ReturnType<typeof terminalWriter> | undefined
   let drop: VoidFunction | undefined
   let reconn: ReturnType<typeof setTimeout> | undefined
   let tries = 0
+  const [shown, setShown] = createSignal(!restore)
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -419,18 +426,30 @@ export const Terminal = (props: TerminalProps) => {
           output.flush(resolve)
         })
 
+      const reveal = () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              if (!disposed) setShown(true)
+              resolve()
+            })
+          })
+        })
+
       if (restore && restoreSize) {
         await write(restore)
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (scrollY !== undefined) t.scrollToLine(scrollY)
         startResize()
+        await reveal()
       } else {
         fit.fit()
         scheduleSize(t.cols, t.rows)
         if (restore) {
           await write(restore)
           if (scrollY !== undefined) t.scrollToLine(scrollY)
+          await reveal()
         }
         startResize()
       }
@@ -606,7 +625,10 @@ export const Terminal = (props: TerminalProps) => {
       {...{ [terminalAttr]: id }}
       data-prevent-autofocus
       tabIndex={-1}
-      style={{ "background-color": terminalColors().background }}
+      style={terminalStyle({
+        background: terminalColors().background,
+        visible: terminalVisible({ restore, shown: shown() }),
+      })}
       classList={{
         ...(local.classList ?? {}),
         "select-text": true,

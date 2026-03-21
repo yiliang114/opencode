@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { showSwitchTerminal } from "./session-header-state"
+import { showSwitchChat, showSwitchTerminal } from "./session-header-state"
 
 describe("showSwitchTerminal", () => {
   test("shows the switch action for chat sessions", () => {
@@ -26,6 +26,37 @@ describe("showSwitchTerminal", () => {
       showSwitchTerminal({
         id: "ses_123",
         surface: "terminal",
+        action: () => undefined,
+      }),
+    ).toBe(false)
+  })
+})
+
+describe("showSwitchChat", () => {
+  test("shows the switch action for terminal sessions", () => {
+    expect(
+      showSwitchChat({
+        id: "ses_123",
+        surface: "terminal",
+        action: () => undefined,
+      }),
+    ).toBe(true)
+  })
+
+  test("hides the switch action without a session id", () => {
+    expect(
+      showSwitchChat({
+        surface: "terminal",
+        action: () => undefined,
+      }),
+    ).toBe(false)
+  })
+
+  test("hides the switch action on chat pages", () => {
+    expect(
+      showSwitchChat({
+        id: "ses_123",
+        surface: "chat",
         action: () => undefined,
       }),
     ).toBe(false)

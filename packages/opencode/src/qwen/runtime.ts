@@ -124,13 +124,14 @@ export function qwenCommand(
     tsx?: string
     cli?: string
     which?: (cmd: string) => string | null
+    preferGlobal?: boolean
   },
 ) {
   const file = input?.dist ?? dist
   const run = input?.tsx ?? tsx
   const entry = input?.cli ?? cli
   const pick = input?.which ?? which
-  const qwen = pick("qwen")
+  const qwen = input?.preferGlobal === false ? null : pick("qwen")
 
   if (qwen) {
     return {

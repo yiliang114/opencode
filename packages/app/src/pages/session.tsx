@@ -45,6 +45,7 @@ import { MessageTimeline } from "@/pages/session/message-timeline"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { syncSessionModel } from "@/pages/session/session-model-helpers"
+import { refreshSession } from "@/pages/layout/sidebar-refresh"
 import { SessionSidePanel } from "@/pages/session/session-side-panel"
 import { guessSize } from "@/pages/session/terminal-size"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
@@ -317,16 +318,23 @@ export default function Page() {
   const [searchParams, setSearchParams] = useSearchParams<{ prompt?: string; qwen?: string; cwd?: string }>()
   const { params, qwen, sessionKey, tabs, view } = useSessionLayout()
   const surface = createMemo(() => view().surface.current())
-  const qwenMode = createMemo(() => !!qwen())
-  const terminalMode = createMemo(() => qwenMode() || terminalPage({ surface: surface(), id: params.id, qwen: qwen() }))
+  const rawQwen = createMemo(() => !!qwen() && !params.id)
+  const terminalMode = createMemo(() => rawQwen() || terminalPage({ surface: surface(), id: params.id, qwen: qwen() }))
 
   createEffect(() => {
     if (!untrack(() => prompt.ready())) return
     prompt.ready()
     untrack(() => {
-      if (params.id || qwen() || !prompt.ready()) return
       const text = searchParams.prompt
       if (!text) return
+      if (!prompt.ready()) return
+      if (params.id) {
+        const items = sync.data.message[params.id]
+        if (!items) return
+        if (items.length > 0) return
+      } else if (qwen()) {
+        return
+      }
       prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
       setSearchParams({ ...searchParams, prompt: undefined })
     })
@@ -334,12 +342,23 @@ export default function Page() {
 
   createEffect(
     on(
-      () => [qwen(), searchParams.cwd] as const,
-      ([id, cwd]) => {
-        if (!id) return
+      () => [qwen(), searchParams.cwd, params.id] as const,
+      ([id, cwd, sessionID]) => {
+        if (!id || sessionID) return
         terminal.openQwen(id, cwd || sdk.directory, terminalSize())
         if (surface() === "terminal") return
         view().surface.set("terminal")
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(
+      () => [surface(), params.id] as const,
+      ([mode, id]) => {
+        if (mode !== "terminal" || !id) return
+        terminal.openSession(id, info()?.directory, terminalSize())
       },
       { defer: true },
     ),
@@ -1671,7 +1690,6 @@ export default function Page() {
   const switchTerminal = () => {
     const id = params.id
     if (!id) return
-    terminal.openSession(id, info()?.directory, terminalSize())
     view().terminal.close()
     void setSurface({
       current: surface(),
@@ -1699,8 +1717,12 @@ export default function Page() {
         sessionID: id,
         set: (next) => view().surface.set(next),
         after: async () => {
-          await sync.session.sync(id, { force: true })
-          await sync.session.todo(id, { force: true })
+          await refreshSession({
+            directory: sdk.directory,
+            sessionID: id,
+            sdk,
+            sync: globalSync,
+          })
         },
       })
     } catch (error) {
@@ -1721,7 +1743,10 @@ export default function Page() {
 
   return (
     <div class="relative bg-background-base size-full overflow-hidden flex flex-col">
-      <SessionHeader onSwitchTerminal={params.id ? switchTerminal : undefined} />
+      <SessionHeader
+        onSwitchChat={params.id ? () => void switchChat() : undefined}
+        onSwitchTerminal={params.id ? switchTerminal : undefined}
+      />
       <div class="flex-1 min-h-0 flex flex-col md:flex-row">
         <Show when={!isDesktop() && !!params.id}>
           <Tabs value={store.mobileTab} class="h-auto">

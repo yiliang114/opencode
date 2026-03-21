@@ -49,9 +49,26 @@ describe("pty", () => {
     )
 
     const prev = process.env.HOME
+    const keys = [
+      "OPENCODE_TEST_HOME",
+      "QWEN_OAUTH",
+      "OPENAI_API_KEY",
+      "OPENAI_MODEL",
+      "OPENAI_BASE_URL",
+      "GEMINI_API_KEY",
+      "GEMINI_MODEL",
+      "GOOGLE_API_KEY",
+      "GOOGLE_MODEL",
+      "ANTHROPIC_API_KEY",
+      "ANTHROPIC_MODEL",
+      "ANTHROPIC_BASE_URL",
+    ] as const
+    const env = Object.fromEntries(keys.map((key) => [key, process.env[key]])) as Record<string, string | undefined>
     process.env.HOME = dir.path
+    for (const key of keys) delete process.env[key]
 
     try {
+      const cli = path.resolve(process.cwd(), "../../vendor/qwen-code/dist/cli.js")
       expect(
         await qwenAuthArgs({
           home: dir.path,
@@ -68,11 +85,17 @@ describe("pty", () => {
             title: "Qwen 1",
           })
 
-          expect(info.args).toEqual(["--auth-type", "openai"])
+          expect(info.command).toBe("node")
+          expect(info.args).toEqual([cli, "--auth-type", "openai"])
           await Pty.remove(info.id)
         },
       })
     } finally {
+      for (const key of keys) {
+        const value = env[key]
+        if (value) process.env[key] = value
+        else delete process.env[key]
+      }
       if (prev) process.env.HOME = prev
       else delete process.env.HOME
     }

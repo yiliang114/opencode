@@ -34,6 +34,24 @@ test("qwenSessionArgs - resumes a saved session in the same project", async () =
   ).toEqual(["--resume", id])
 })
 
+test("qwenSessionArgs - resumes a linked raw qwen session without rehashing the id", async () => {
+  await using tmp = await tmpdir({})
+  const dir = path.join(tmp.path, "repo")
+  const id = "11111111-1111-4111-8111-111111111111"
+  const file = path.join(tmp.path, ".qwen", "projects", project(dir), "chats", `${id}.jsonl`)
+  await mkdir(path.dirname(file), { recursive: true })
+  await Bun.write(file, `${JSON.stringify({ cwd: dir })}\n`)
+
+  expect(
+    await qwenSessionArgs({
+      dir,
+      id,
+      raw: true,
+      home: tmp.path,
+    }),
+  ).toEqual(["--resume", id])
+})
+
 test("qwenSessionArgs - starts a new session when saved chat belongs to another project", async () => {
   await using tmp = await tmpdir({})
   const dir = path.join(tmp.path, "repo")

@@ -65,6 +65,14 @@ export function SessionComposerRegion(props: {
     setSessionHandoff(route.sessionKey(), { prompt: previewPrompt() })
   })
 
+  createEffect(() => {
+    const text = handoffPrompt()
+    if (!text) return
+    if (!prompt.ready()) return
+    if (previewPrompt()) return
+    prompt.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+  })
+
   const [store, setStore] = createStore({
     ready: false,
     height: 320,

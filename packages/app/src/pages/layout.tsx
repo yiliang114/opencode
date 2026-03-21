@@ -54,6 +54,8 @@ import { createAim } from "@/utils/aim"
 import { setNavigate } from "@/utils/notification-click"
 import { Worktree as WorktreeState } from "@/utils/worktree"
 import { setSessionHandoff } from "@/pages/session/handoff"
+import { createQwenSession, linkedHref } from "@/pages/session/qwen-route"
+import { formatServerError } from "@/utils/server-errors"
 
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme, type ColorScheme } from "@opencode-ai/ui/theme"
@@ -303,6 +305,36 @@ export default function Layout(props: ParentProps) {
     clearSidebarHoverState()
     navigate(href)
     layout.mobileSidebar.hide()
+  }
+
+  const navigateNewQwen = async (dir: string, prompt?: string) => {
+    try {
+      const slug = base64Encode(dir)
+      const next = await createQwenSession({
+        url: globalSDK.url,
+        dir,
+      })
+      if (prompt) {
+        setSessionHandoff(`${slug}/${next.session.id}`, { prompt })
+      }
+      const href = new URL(
+        linkedHref({
+          dir: slug,
+          sessionID: next.session.id,
+          qwen: next.qwen,
+        }),
+        "http://localhost",
+      )
+      if (prompt) href.searchParams.set("prompt", prompt)
+      navigateWithSidebarReset(
+        `${href.pathname}${href.search}`,
+      )
+    } catch (error) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: formatServerError(error, language.t),
+      })
+    }
   }
 
   function cycleTheme(direction = 1) {
@@ -1303,12 +1335,7 @@ export default function Layout(props: ParentProps) {
 
     for (const link of collectNewSessionDeepLinks(urls)) {
       openProject(link.directory, false)
-      const slug = base64Encode(link.directory)
-      if (link.prompt) {
-        setSessionHandoff(slug, { prompt: link.prompt })
-      }
-      const href = link.prompt ? `/${slug}/session?prompt=${encodeURIComponent(link.prompt)}` : `/${slug}/session`
-      navigateWithSidebarReset(href)
+      void navigateNewQwen(link.directory, link.prompt)
     }
   }
 
@@ -1532,9 +1559,7 @@ export default function Layout(props: ParentProps) {
         {
           label: language.t("command.session.new"),
           onClick: () => {
-            const href = `/${base64Encode(directory)}/session`
-            navigate(href)
-            layout.mobileSidebar.hide()
+            void navigateNewQwen(directory)
           },
         },
         {
@@ -2126,7 +2151,7 @@ export default function Layout(props: ParentProps) {
                         onClick={() => {
                           const dir = worktree()
                           if (!dir) return
-                          navigateWithSidebarReset(`/${base64Encode(dir)}/session`)
+                          void navigateNewQwen(dir)
                         }}
                       >
                         {language.t("command.session.new")}

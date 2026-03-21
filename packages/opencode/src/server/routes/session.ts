@@ -20,6 +20,7 @@ import { ModelID, ProviderID } from "@/provider/schema"
 import { QwenSync } from "@/qwen/sync"
 import { listQwenSessions } from "@/qwen/list"
 import { linkQwen } from "@/qwen/link"
+import { qwenSessionID } from "@/qwen/session"
 import { errors } from "../error"
 import { lazy } from "../../util/lazy"
 
@@ -134,6 +135,50 @@ export const SessionRoutes = lazy(() =>
       async (c) => {
         const query = c.req.valid("query")
         return c.json(await listQwenSessions({ dir: query.directory }))
+      },
+    )
+    .post(
+      "/qwen",
+      describeRoute({
+        summary: "Create a Qwen-backed session",
+        description: "Create a new OpenCode session and reserve its canonical Qwen session ID for unified chat and terminal routing.",
+        operationId: "session.qwen.create",
+        responses: {
+          200: {
+            description: "Created Qwen-backed session",
+            content: {
+              "application/json": {
+                schema: resolver(
+                  z.object({
+                    session: Session.Info,
+                    qwen: z.string(),
+                  }),
+                ),
+              },
+            },
+          },
+          ...errors(400),
+        },
+      }),
+      validator(
+        "json",
+        z.object({
+          directory: z.string(),
+          title: z.string().optional(),
+          permission: Session.Info.shape.permission.optional(),
+        }),
+      ),
+      async (c) => {
+        const body = c.req.valid("json")
+        const session = await Session.createNext({
+          directory: body.directory,
+          title: body.title,
+          permission: body.permission,
+        })
+        return c.json({
+          session,
+          qwen: qwenSessionID(session.id),
+        })
       },
     )
     .post(

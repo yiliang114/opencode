@@ -10,6 +10,8 @@ import { Plugin } from "@/plugin"
 import { PtyID } from "./schema"
 import { qwenSessionArgs } from "@/qwen/session"
 import { qwenAuthArgs } from "@/qwen/auth"
+import { qwenCommand } from "@/qwen/runtime"
+import { linkedQwen } from "@/qwen/map"
 
 export namespace Pty {
   const log = Log.create({ service: "pty" })
@@ -170,6 +172,7 @@ export namespace Pty {
     const raw = [...(input.args || [])]
     const env = input.env ? { ...input.env } : undefined
     const sid = command === "qwen" ? env?.OPENCODE_SESSION_ID : undefined
+    const ref = sid ? await linkedQwen(sid) : undefined
     if (env?.OPENCODE_SESSION_ID) delete env.OPENCODE_SESSION_ID
     const auth =
       command === "qwen" && !raw.includes("--auth-type")
@@ -186,9 +189,24 @@ export namespace Pty {
       !raw.includes("--continue") &&
       !raw.includes("--resume") &&
       !raw.includes("--session-id")
-        ? [...auth, ...(await qwenSessionArgs({ dir: cwd, id: sid })), ...raw]
+        ? [
+            ...auth,
+            ...(await qwenSessionArgs({
+              dir: ref?.dir ?? cwd,
+              id: ref?.qwen ?? sid,
+              raw: !!ref?.qwen,
+            })),
+            ...raw,
+          ]
         : [...auth, ...raw]
-    if (command.endsWith("sh")) args.push("-l")
+    const qwen =
+      command === "qwen"
+        ? qwenCommand(process.execPath, {
+            preferGlobal: false,
+          })
+        : undefined
+    const exec = qwen?.command ?? command
+    const argv = [...(qwen?.args ?? []), ...args]
     const shellEnv = await Plugin.trigger("shell.env", { cwd }, { env: {} })
     const vars = ptyEnv({
       command,
@@ -196,10 +214,11 @@ export namespace Pty {
       env,
       shell: shellEnv.env,
     })
-    log.info("creating session", { id, cmd: command, args, cwd })
+    log.info("creating session", { id, cmd: exec, args: argv, cwd })
 
     const spawn = await pty()
-    const ptyProcess = spawn(command, args, {
+    const finalArgs = command.endsWith("sh") ? [...argv, "-l"] : argv
+    const ptyProcess = spawn(exec, finalArgs, {
       name: "xterm-256color",
       cwd,
       env: vars,
@@ -214,8 +233,8 @@ export namespace Pty {
     const info = {
       id,
       title: input.title || `Terminal ${id.slice(-4)}`,
-      command,
-      args,
+      command: exec,
+      args: finalArgs,
       cwd,
       status: "running",
       pid: ptyProcess.pid,

@@ -18,6 +18,7 @@ import { DialogFork } from "@/components/dialog-fork"
 import { showToast } from "@opencode-ai/ui/toast"
 import { findLast } from "@opencode-ai/util/array"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { createQwenSession, linkedHref } from "@/pages/session/qwen-route"
 import { extractPromptFromParts } from "@/utils/prompt"
 import { UserMessage } from "@opencode-ai/sdk/v2"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -50,6 +51,31 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const layout = useLayout()
   const navigate = useNavigate()
   const { params, tabs, view } = useSessionLayout()
+
+  const openNew = async () => {
+    const dir = sdk.directory
+    const slug = params.dir
+    if (!dir || !slug) return
+    try {
+      const next = await createQwenSession({
+        url: sdk.url,
+        dir,
+      })
+      navigate(
+        linkedHref({
+          dir: slug,
+          sessionID: next.session.id,
+          qwen: next.qwen,
+        }),
+      )
+    } catch (error) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: error instanceof Error ? error.message : String(error),
+        variant: "error",
+      })
+    }
+  }
 
   const info = () => {
     const id = params.id
@@ -249,7 +275,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         title: language.t("command.session.new"),
         keybind: "mod+shift+s",
         slash: "new",
-        onSelect: () => navigate(`/${params.dir}/session`),
+        onSelect: () => {
+          void openNew()
+        },
       }),
       fileCommand({
         id: "file.open",

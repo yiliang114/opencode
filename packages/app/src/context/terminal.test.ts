@@ -3,6 +3,29 @@ import { beforeAll, describe, expect, mock, test } from "bun:test"
 let getWorkspaceTerminalCacheKey: (dir: string) => string
 let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
 let migrateTerminalState: (value: unknown) => unknown
+let cloneTerminal: (input: {
+  id: string
+  title: string
+  titleNumber: number
+  session?: string
+  qwen?: string
+  buffer?: string
+  cursor?: number
+  scrollY?: number
+  rows?: number
+  cols?: number
+}, next: { id: string; title?: string }) => {
+  id: string
+  title: string
+  titleNumber: number
+  session?: string
+  qwen?: string
+  buffer?: string
+  cursor?: number
+  scrollY?: number
+  rows?: number
+  cols?: number
+}
 let findSessionTerminal: (
   all: Array<{ id: string; session?: string }>,
   session?: string,
@@ -86,6 +109,7 @@ beforeAll(async () => {
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
+  cloneTerminal = mod.cloneTerminal
   findSessionTerminal = mod.findSessionTerminal
   findQwenTerminal = mod.findQwenTerminal
   terminalInput = mod.terminalInput
@@ -150,6 +174,42 @@ describe("migrateTerminalState", () => {
         { id: "one", title: "Terminal 1", titleNumber: 1 },
         { id: "two", title: "shell", titleNumber: 7 },
       ],
+    })
+  })
+})
+
+describe("cloneTerminal", () => {
+  test("preserves session and qwen bindings while clearing transient buffer state", () => {
+    expect(
+      cloneTerminal(
+        {
+          id: "pty_old",
+          title: "Qwen 2",
+          titleNumber: 2,
+          session: "ses_123",
+          qwen: "qwen_123",
+          buffer: "restored",
+          cursor: 10,
+          scrollY: 3,
+          rows: 24,
+          cols: 80,
+        },
+        {
+          id: "pty_new",
+          title: "Qwen 2",
+        },
+      ),
+    ).toEqual({
+      id: "pty_new",
+      title: "Qwen 2",
+      titleNumber: 2,
+      session: "ses_123",
+      qwen: "qwen_123",
+      buffer: undefined,
+      cursor: undefined,
+      scrollY: undefined,
+      rows: undefined,
+      cols: undefined,
     })
   })
 })

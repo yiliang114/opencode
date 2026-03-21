@@ -4,13 +4,17 @@ import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Button } from "@opencode-ai/ui/button"
+import { showToast } from "@opencode-ai/ui/toast"
 import { Tooltip, TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { useTheme } from "@opencode-ai/ui/theme"
 
+import { useGlobalSDK } from "@/context/global-sdk"
 import { useLayout } from "@/context/layout"
 import { usePlatform } from "@/context/platform"
 import { useCommand } from "@/context/command"
 import { useLanguage } from "@/context/language"
+import { createQwenSession, linkedHref } from "@/pages/session/qwen-route"
+import { formatServerError } from "@/utils/server-errors"
 import { applyPath, backPath, forwardPath } from "./titlebar-history"
 
 type TauriDesktopWindow = {
@@ -40,6 +44,7 @@ export function Titlebar() {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
+  const globalSdk = useGlobalSDK()
   const theme = useTheme()
   const navigate = useNavigate()
   const location = useLocation()
@@ -78,6 +83,27 @@ export function Titlebar() {
   const canBack = createMemo(() => history.index > 0)
   const canForward = createMemo(() => history.index < history.stack.length - 1)
   const hasProjects = createMemo(() => layout.projects.list().length > 0)
+
+  const openNew = async (dir: string) => {
+    try {
+      const next = await createQwenSession({
+        url: globalSdk.url,
+        dir,
+      })
+      navigate(
+        linkedHref({
+          dir: params.dir ?? "",
+          sessionID: next.session.id,
+          qwen: next.qwen,
+        }),
+      )
+    } catch (error) {
+      showToast({
+        title: language.t("common.requestFailed"),
+        description: formatServerError(error, language.t),
+      })
+    }
+  }
 
   const back = () => {
     const next = backPath(history)
@@ -243,7 +269,7 @@ export function Titlebar() {
                       tabIndex={layout.sidebar.opened() ? -1 : undefined}
                       onClick={() => {
                         if (!params.dir) return
-                        navigate(`/${params.dir}/session`)
+                        void openNew(params.dir)
                       }}
                       aria-label={language.t("command.session.new")}
                       aria-current={creating() ? "page" : undefined}

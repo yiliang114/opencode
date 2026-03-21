@@ -1,5 +1,5 @@
 import { test, expect } from "../fixtures"
-import { openSettings, closeDialog, waitTerminalFocusIdle, withSession } from "../actions"
+import { openSettings, closeDialog, sessionIDFromUrl, waitTerminalFocusIdle, withSession } from "../actions"
 import { keybindButtonSelector, terminalSelector } from "../selectors"
 import { modKey } from "../utils"
 
@@ -223,11 +223,16 @@ test("changing new session keybind works", async ({ page, sdk, gotoSession }) =>
     await closeDialog(page, dialog)
 
     await page.keyboard.press(`${modKey}+Shift+N`)
-    await page.waitForTimeout(200)
+    await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe(session.id)
 
-    const newUrl = page.url()
-    expect(newUrl).toMatch(/\/session\/?$/)
-    expect(newUrl).not.toContain(session.id)
+    const next = sessionIDFromUrl(page.url())
+    expect(next).toBeTruthy()
+    expect(next).not.toBe(session.id)
+    await expect(page).toHaveURL(new RegExp(`/session/${next}\\?qwen=[^&]+(?:&.*)?$`))
+
+    if (next) {
+      await sdk.session.delete({ sessionID: next }).catch(() => undefined)
+    }
   })
 })
 

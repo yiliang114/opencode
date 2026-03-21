@@ -9,7 +9,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { showToast } from "@opencode-ai/ui/toast"
 import { base64Encode } from "@opencode-ai/util/encode"
 import { getFilename } from "@opencode-ai/util/path"
-import { A, useNavigate, useParams } from "@solidjs/router"
+import { A, useLocation, useNavigate, useParams } from "@solidjs/router"
 import { type Accessor, createMemo, For, type JSX, Match, onCleanup, Show, Switch } from "solid-js"
 import { useGlobalSync } from "@/context/global-sync"
 import { useLanguage } from "@/context/language"
@@ -19,6 +19,7 @@ import { usePermission } from "@/context/permission"
 import { messageAgentColor } from "@/utils/agent"
 import { formatServerError } from "@/utils/server-errors"
 import { syncBeforeNavigate } from "../session/session-switch"
+import { linkedHref, type QwenSession } from "../session/qwen-route"
 import { sessionPermissionRequest } from "../session/composer/session-request-tree"
 import { hasProjectPermissions } from "./helpers"
 import { useSidebarSync } from "./sidebar-sync"
@@ -71,6 +72,7 @@ export const ProjectIcon = (props: { project: LocalProject; class?: string; noti
 
 export type SessionItemProps = {
   session: Session
+  qwen?: QwenSession
   list: Session[]
   navList?: Accessor<Session[]>
   slug: string
@@ -194,6 +196,7 @@ const SessionHoverPreview = (props: {
 
 export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const params = useParams()
+  const location = useLocation()
   const navigate = useNavigate()
   const layout = useLayout()
   const language = useLanguage()
@@ -235,7 +238,11 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
   const hoverReady = createMemo(() => hoverMessages() !== undefined)
   const hoverAllowed = createMemo(() => !props.mobile && props.sidebarExpanded())
   const hoverEnabled = createMemo(() => (props.popover ?? true) && hoverAllowed())
-  const isActive = createMemo(() => props.session.id === params.id)
+  const isActive = createMemo(() => {
+    if (props.session.id !== params.id) return false
+    if (!props.qwen) return true
+    return new URLSearchParams(location.search).get("qwen") === props.qwen.id
+  })
 
   const warm = (span: number, priority: "high" | "low") => {
     const nav = props.navList?.()
@@ -281,7 +288,14 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
     const text = parts.find((part): part is TextPart => part?.type === "text" && !part.synthetic && !part.ignored)
     return text?.text
   }
-  const href = `/${props.slug}/session/${props.session.id}`
+  const href = props.qwen
+    ? linkedHref({
+        dir: props.slug,
+        sessionID: props.session.id,
+        qwen: props.qwen.id,
+        cwd: props.qwen.cwd,
+      })
+    : `/${props.slug}/session/${props.session.id}`
   const open = (hash?: string) => {
     void syncBeforeNavigate({
       surface: nav.surface(),
@@ -391,26 +405,26 @@ export const SessionItem = (props: SessionItemProps): JSX.Element => {
 }
 
 export const NewSessionItem = (props: {
-  slug: string
   mobile?: boolean
   dense?: boolean
   sidebarExpanded: Accessor<boolean>
   clearHoverProjectSoon: () => void
   setHoverSession: (id: string | undefined) => void
+  onCreate: () => void
 }): JSX.Element => {
   const layout = useLayout()
   const language = useLanguage()
   const label = language.t("command.session.new")
   const tooltip = () => props.mobile || !props.sidebarExpanded()
   const item = (
-    <A
-      href={`/${props.slug}/session`}
-      end
+    <button
+      type="button"
       class={`flex items-center justify-between gap-3 min-w-0 text-left w-full focus:outline-none ${props.dense ? "py-0.5" : "py-1"}`}
       onClick={() => {
         props.setHoverSession(undefined)
         if (layout.sidebar.opened()) return
         props.clearHoverProjectSoon()
+        props.onCreate()
       }}
     >
       <div class="flex items-center gap-1 w-full">
@@ -421,7 +435,7 @@ export const NewSessionItem = (props: {
           {label}
         </span>
       </div>
-    </A>
+    </button>
   )
 
   return (

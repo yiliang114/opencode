@@ -1,3 +1,5 @@
+import type { Session } from "@opencode-ai/sdk/v2/client"
+
 export type QwenSession = {
   id: string
   sessionID?: string
@@ -16,6 +18,10 @@ export function qwenListUrl(url: string, dir: string) {
 
 export function qwenLinkUrl(url: string) {
   return new URL("/session/qwen/link", url).toString()
+}
+
+export function qwenCreateUrl(url: string) {
+  return new URL("/session/qwen", url).toString()
 }
 
 export async function ensureQwenSession(input: {
@@ -40,6 +46,30 @@ export async function ensureQwenSession(input: {
     id: string
   }
   return data.id
+}
+
+export async function createQwenSession(input: {
+  url: string
+  dir: string
+  title?: string
+  fetch?: typeof globalThis.fetch
+}) {
+  const fetch = input.fetch ?? globalThis.fetch
+  const result = await fetch(qwenCreateUrl(input.url), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      directory: input.dir,
+      ...(input.title ? { title: input.title } : {}),
+    }),
+  })
+  if (!result.ok) throw new Error(`Failed to create qwen session: ${result.status}`)
+  return (await result.json()) as {
+    session: Session
+    qwen: string
+  }
 }
 
 export function qwenHref(dir: string, qwen: string, cwd?: string) {

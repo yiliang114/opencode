@@ -41,10 +41,11 @@ export function qwenSessionID(id: string) {
 export async function qwenSessionArgs(input: {
   dir: string
   id?: string
+  raw?: boolean
   home?: string
 }) {
   if (!input.id) return []
-  const sid = qwenSessionID(input.id)
+  const sid = input.raw ? input.id : qwenSessionID(input.id)
   const file = Bun.file(qwenChatPath({ dir: input.dir, id: sid, home: input.home }))
   if (!(await file.exists())) return ["--session-id", sid]
 

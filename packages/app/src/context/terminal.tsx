@@ -205,6 +205,19 @@ const trimTerminal = (pty: LocalPTY) => {
   }
 }
 
+export function cloneTerminal(pty: LocalPTY, next: { id: string; title?: string }): LocalPTY {
+  return {
+    ...pty,
+    id: next.id,
+    title: next.title ?? pty.title,
+    buffer: undefined,
+    cursor: undefined,
+    scrollY: undefined,
+    rows: undefined,
+    cols: undefined,
+  }
+}
+
 export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
   const key = getWorkspaceTerminalCacheKey(dir)
   for (const cache of caches) {
@@ -385,17 +398,7 @@ function createWorkspaceTerminalSession(
       const active = store.active === pty.id
 
       batch(() => {
-        setStore("all", index, {
-          id: clone.data.id,
-          title: clone.data.title ?? pty.title,
-          titleNumber: pty.titleNumber,
-          // New PTY process, so start clean.
-          buffer: undefined,
-          cursor: undefined,
-          scrollY: undefined,
-          rows: undefined,
-          cols: undefined,
-        })
+        setStore("all", index, cloneTerminal(pty, clone.data))
         if (active) {
           setStore("active", clone.data.id)
         }

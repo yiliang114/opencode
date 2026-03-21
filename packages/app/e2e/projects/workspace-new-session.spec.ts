@@ -44,7 +44,10 @@ async function openWorkspaceNewSession(page: Page, slug: string) {
   await button.click({ force: true })
 
   const next = await waitSlug(page)
-  await expect(page).toHaveURL(new RegExp(`/${next}/session(?:[/?#]|$)`))
+  await expect.poll(() => sessionIDFromUrl(page.url()) ?? "", { timeout: 30_000 }).not.toBe("")
+  const sessionID = sessionIDFromUrl(page.url())
+  if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
+  await expect(page).toHaveURL(new RegExp(`/${next}/session/${sessionID}\\?qwen=[^&]+(?:&.*)?$`))
   return next
 }
 
@@ -65,7 +68,7 @@ async function createSessionFromWorkspace(page: Page, slug: string, text: string
 
   const sessionID = sessionIDFromUrl(page.url())
   if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
-  await expect(page).toHaveURL(new RegExp(`/${next}/session/${sessionID}(?:[/?#]|$)`))
+  await expect(page).toHaveURL(new RegExp(`/${next}/session/${sessionID}\\?qwen=[^&]+(?:&.*)?$`))
   return { sessionID, slug: next }
 }
 

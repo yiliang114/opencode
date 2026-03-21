@@ -19,6 +19,21 @@ test("qwenCommand - prefers global qwen when available", async () => {
   expect(cmd.args).toEqual([])
 })
 
+test("qwenCommand - can prefer the vendored cli over global qwen", async () => {
+  await using tmp = await tmpdir({})
+  const file = path.join(tmp.path, "dist", "cli.js")
+  await mkdir(path.dirname(file), { recursive: true })
+  await Bun.write(file, "")
+  const cmd = qwenCommand("/tmp/bun", {
+    dist: file,
+    which: () => "/tmp/qwen",
+    preferGlobal: false,
+  })
+
+  expect(cmd.command).toBe("node")
+  expect(cmd.args).toEqual([file])
+})
+
 test("qwenCommand - falls back to built cli when global qwen is missing", async () => {
   await using tmp = await tmpdir({})
   const file = path.join(tmp.path, "dist", "cli.js")

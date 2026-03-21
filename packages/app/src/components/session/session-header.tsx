@@ -24,7 +24,7 @@ import { messageAgentColor } from "@/utils/agent"
 import { decode64 } from "@/utils/base64"
 import { Persist, persisted } from "@/utils/persist"
 import { StatusPopover } from "../status-popover"
-import { showSwitchTerminal } from "./session-header-state"
+import { showSwitchChat, showSwitchTerminal } from "./session-header-state"
 
 const OPEN_APPS = [
   "vscode",
@@ -130,6 +130,7 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
 }
 
 export function SessionHeader(props: {
+  onSwitchChat?: () => void
   onSwitchTerminal?: () => void
 }) {
   const layout = useLayout()
@@ -233,6 +234,13 @@ export function SessionHeader(props: {
       id: params.id,
       surface: surface(),
       action: props.onSwitchTerminal,
+    }),
+  )
+  const canReturn = createMemo(() =>
+    showSwitchChat({
+      id: params.id,
+      surface: surface(),
+      action: props.onSwitchChat,
     }),
   )
 
@@ -426,6 +434,19 @@ export function SessionHeader(props: {
                 </div>
               </Show>
               <div class="flex items-center gap-1">
+                <Show when={canReturn()}>
+                  <Button
+                    variant="secondary"
+                    size="small"
+                    icon="bubble-5"
+                    class="shrink-0 min-w-0"
+                    data-action="session-switch-chat"
+                    onClick={() => props.onSwitchChat?.()}
+                    aria-label={language.t("session.switch.chat")}
+                  >
+                    <span class="max-md:hidden">{language.t("session.switch.chat")}</span>
+                  </Button>
+                </Show>
                 <Show when={canSwitch()}>
                   <Button
                     variant="secondary"

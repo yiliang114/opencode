@@ -1,6 +1,7 @@
 import { test, expect } from "../fixtures"
 import { promptSelector } from "../selectors"
 import { cleanupSession, sessionIDFromUrl, withSession } from "../actions"
+import { createSdk } from "../utils"
 
 test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession }) => {
   test.setTimeout(120_000)
@@ -52,4 +53,43 @@ test("can send a prompt and receive a reply", async ({ page, sdk, gotoSession })
   if (pageErrors.length > 0) {
     throw new Error(`Page error(s):\n${pageErrors.join("\n")}`)
   }
+})
+
+test("first prompt from an empty session route creates a linked qwen session", async ({ page, withProject }) => {
+  test.setTimeout(120_000)
+
+  await withProject(async ({ directory, slug, gotoSession, trackSession }) => {
+    const sdk = createSdk(directory)
+    const token = `E2E_NEW_${Date.now()}`
+
+    await gotoSession()
+    await expect(page).toHaveURL(new RegExp(`/${slug}/session$`))
+    expect(sessionIDFromUrl(page.url())).toBeUndefined()
+
+    const prompt = page.locator(promptSelector)
+    await prompt.click()
+    await page.keyboard.type(`Reply with exactly: ${token}`)
+    await page.keyboard.press("Enter")
+
+    await expect(page).toHaveURL(/\/session\/ses_[^?]+\?qwen=[^&]+(?:&.*)?$/, { timeout: 30_000 })
+
+    const sessionID = sessionIDFromUrl(page.url())
+    if (!sessionID) throw new Error(`Failed to parse session id from url: ${page.url()}`)
+    trackSession(sessionID)
+
+    await expect
+      .poll(
+        async () => {
+          const messages = await sdk.session.messages({ sessionID, limit: 50 }).then((r) => r.data ?? [])
+          return messages
+            .filter((m) => m.info.role === "assistant")
+            .flatMap((m) => m.parts)
+            .filter((p) => p.type === "text")
+            .map((p) => p.text)
+            .join("\n")
+        },
+        { timeout: 90_000 },
+      )
+      .toContain(token)
+  })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test"
-import { ensureQwenSession, qwenHref, qwenLinkUrl, qwenTarget, sessionHref, sessionPageKey, terminalPage } from "./qwen-route"
+import { createQwenSession, ensureQwenSession, qwenCreateUrl, qwenHref, qwenLinkUrl, qwenTarget, sessionHref, sessionPageKey, terminalPage } from "./qwen-route"
 
 describe("qwenHref", () => {
   test("builds a terminal route for a qwen session", () => {
@@ -10,6 +10,47 @@ describe("qwenHref", () => {
 describe("qwenLinkUrl", () => {
   test("builds the qwen link endpoint from the current server url", () => {
     expect(qwenLinkUrl("http://127.0.0.1:4096/")).toBe("http://127.0.0.1:4096/session/qwen/link")
+  })
+})
+
+describe("qwenCreateUrl", () => {
+  test("builds the qwen create endpoint from the current server url", () => {
+    expect(qwenCreateUrl("http://127.0.0.1:4096/")).toBe("http://127.0.0.1:4096/session/qwen")
+  })
+})
+
+describe("createQwenSession", () => {
+  test("posts to create a linked qwen-backed session", async () => {
+    const fetch = mock(() =>
+      Promise.resolve({
+        ok: true,
+        json: async () => ({
+          session: { id: "ses_123" } as unknown,
+          qwen: "qwen_123",
+        }),
+      }),
+    )
+
+    await expect(
+      createQwenSession({
+        url: "http://127.0.0.1:4096/",
+        dir: "/repo",
+        fetch: fetch as unknown as typeof globalThis.fetch,
+      }),
+    ).resolves.toMatchObject({
+      session: { id: "ses_123" },
+      qwen: "qwen_123",
+    })
+
+    expect(fetch).toHaveBeenCalledWith("http://127.0.0.1:4096/session/qwen", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        directory: "/repo",
+      }),
+    })
   })
 })
 

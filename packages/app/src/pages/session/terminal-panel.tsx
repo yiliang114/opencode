@@ -2,7 +2,6 @@ import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "sol
 import { createStore } from "solid-js/store"
 import { Tabs } from "@opencode-ai/ui/tabs"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
-import { Button } from "@opencode-ai/ui/button"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { TooltipKeybind } from "@opencode-ai/ui/tooltip"
 import { DragDropProvider, DragDropSensors, DragOverlay, SortableProvider, closestCenter } from "@thisbeyond/solid-dnd"
@@ -279,20 +278,6 @@ export function TerminalPanel(props: {
                     <For each={all()}>{(pty) => <SortableTerminalTab terminal={pty} onClose={close} />}</For>
                   </SortableProvider>
                   <div class="h-full flex items-center justify-center">
-                    <Show when={props.onSwitchChat}>
-                      {(switchChat) => (
-                        <Button
-                          variant="secondary"
-                          size="normal"
-                          icon="bubble-5"
-                          class="mr-2 shrink-0"
-                          data-action="session-switch-chat"
-                          onClick={switchChat()}
-                        >
-                          {language.t("session.switch.chat")}
-                        </Button>
-                      )}
-                    </Show>
                     <TooltipKeybind
                       title={language.t("command.terminal.new")}
                       keybind={command.keybind("terminal.new")}
