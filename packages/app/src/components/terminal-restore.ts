@@ -3,7 +3,6 @@ export function restoreBuffer(input: {
   session?: string
   qwen?: string
 }) {
-  if (input.session || input.qwen) return ""
   return typeof input.buffer === "string" ? input.buffer : ""
 }
 

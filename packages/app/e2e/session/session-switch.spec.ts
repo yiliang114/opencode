@@ -1,7 +1,8 @@
 import fs from "node:fs/promises"
 import path from "node:path"
 import { test, expect } from "../fixtures"
-import { waitTerminalReady, withSession } from "../actions"
+import { openSidebar, terminalConnects, waitTerminalReady, withSession } from "../actions"
+import { sessionItemSelector, terminalSelector } from "../selectors"
 import { qwenSessionID } from "../../../opencode/src/qwen/session"
 
 async function seedMessage(sdk: Parameters<typeof withSession>[0], sessionID: string) {
@@ -92,5 +93,121 @@ test("session can switch between chat and terminal and sync qwen tail", async ({
       .toBe(true)
 
     await expect(page.getByText("Imported from terminal")).toBeVisible()
+  })
+})
+
+test("chat surface unmounts terminal clients when the drawer is closed", async ({ page, sdk, gotoSession }) => {
+  await withSession(sdk, `e2e unmount ${Date.now()}`, async (session) => {
+    await seedMessage(sdk, session.id)
+    await gotoSession(session.id)
+
+    const switchTerminal = page.locator('[data-action="session-switch-terminal"]').first()
+    await expect(switchTerminal).toBeVisible()
+    await switchTerminal.click()
+    await waitTerminalReady(page)
+
+    const switchChat = page.locator('[data-action="session-switch-chat"]').first()
+    await expect(switchChat).toBeVisible()
+    await switchChat.click()
+
+    await expect(page.locator(`${terminalSelector}:visible`)).toHaveCount(0)
+  })
+})
+
+test("switching between terminal sessions keeps a single visible terminal client mounted", async ({ page, sdk, gotoSession }) => {
+  await withSession(sdk, `e2e terminal a ${Date.now()}`, async (a) => {
+    await withSession(sdk, `e2e terminal b ${Date.now()}`, async (b) => {
+      await seedMessage(sdk, a.id)
+      await seedMessage(sdk, b.id)
+
+      await gotoSession(a.id)
+      await page.locator('[data-action="session-switch-terminal"]').first().click()
+      await waitTerminalReady(page)
+      await expect(page.locator(`${terminalSelector}:visible`)).toHaveCount(1)
+
+      await openSidebar(page)
+      await page.locator(sessionItemSelector(b.id)).last().click()
+      await page.locator('[data-action="session-switch-terminal"]').first().click()
+      await waitTerminalReady(page)
+      await expect(page.locator(`${terminalSelector}:visible`)).toHaveCount(1)
+
+      await openSidebar(page)
+      await page.locator(sessionItemSelector(a.id)).last().click()
+      await waitTerminalReady(page)
+      await expect(page.locator(`${terminalSelector}:visible`)).toHaveCount(1)
+    })
+  })
+})
+
+test("switching between terminal sessions keeps a single terminal render layer in the document", async ({
+  page,
+  sdk,
+  gotoSession,
+}) => {
+  await withSession(sdk, `e2e terminal layers a ${Date.now()}`, async (a) => {
+    await withSession(sdk, `e2e terminal layers b ${Date.now()}`, async (b) => {
+      await seedMessage(sdk, a.id)
+      await seedMessage(sdk, b.id)
+
+      await gotoSession(a.id)
+      await page.locator('[data-action="session-switch-terminal"]').first().click()
+      await waitTerminalReady(page)
+
+      await openSidebar(page)
+      await page.locator(sessionItemSelector(b.id)).last().click()
+      await page.locator('[data-action="session-switch-terminal"]').first().click()
+      await waitTerminalReady(page)
+
+      await expect
+        .poll(async () =>
+          page.evaluate(() => ({
+            terminals: Array.from(
+              document.querySelectorAll('#terminal-panel[aria-hidden="false"] [data-component="terminal"]'),
+            ).filter((item) => (item as HTMLElement).offsetParent !== null).length,
+            wrappers: Array.from(document.querySelectorAll('#terminal-panel[aria-hidden="false"] [id^="terminal-wrapper-"]')).filter(
+              (item) => !(item as HTMLElement).classList.contains('hidden'),
+            ).length,
+            canvases: Array.from(
+              document.querySelectorAll('#terminal-panel[aria-hidden="false"] [data-component="terminal"] canvas'),
+            ).filter((item) => (item as HTMLElement).offsetParent !== null).length,
+            textareas: Array.from(
+              document.querySelectorAll('#terminal-panel[aria-hidden="false"] [data-component="terminal"] textarea'),
+            ).filter((item) => (item as HTMLElement).offsetParent !== null).length,
+          })),
+        )
+        .toEqual({
+          terminals: 1,
+          wrappers: 1,
+          canvases: 1,
+          textareas: 1,
+        })
+    })
+  })
+})
+
+test("switching back to an existing terminal session does not reconnect its client", async ({ page, sdk, gotoSession }) => {
+  await withSession(sdk, `e2e terminal reconnect a ${Date.now()}`, async (a) => {
+    await withSession(sdk, `e2e terminal reconnect b ${Date.now()}`, async (b) => {
+      await seedMessage(sdk, a.id)
+      await seedMessage(sdk, b.id)
+
+      await gotoSession(a.id)
+      await page.locator('[data-action="session-switch-terminal"]').first().click()
+      await waitTerminalReady(page)
+      const aTerm = page.locator(`${terminalSelector}:visible`).first()
+      await expect.poll(() => terminalConnects(page, { term: aTerm })).toBe(1)
+
+      await openSidebar(page)
+      await page.locator(sessionItemSelector(b.id)).last().click()
+      await page.locator('[data-action="session-switch-terminal"]').first().click()
+      await waitTerminalReady(page)
+      const bTerm = page.locator(`${terminalSelector}:visible`).first()
+      await expect.poll(() => terminalConnects(page, { term: bTerm })).toBe(1)
+
+      await openSidebar(page)
+      await page.locator(sessionItemSelector(a.id)).last().click()
+      await waitTerminalReady(page)
+      await expect.poll(() => terminalConnects(page, { term: page.locator(`${terminalSelector}:visible`).first() })).toBe(1)
+    })
   })
 })

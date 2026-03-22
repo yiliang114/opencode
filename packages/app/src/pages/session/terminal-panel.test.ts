@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { terminalTabLabel } from "./terminal-label"
-import { emptyTerminalAction } from "./terminal-surface"
+import { emptyTerminalAction, showInlineTerminal } from "./terminal-surface"
 
 const t = (key: string, vars?: Record<string, string | number | boolean>) => {
   if (key === "terminal.title.numbered") return `Terminal ${vars?.number}`
@@ -32,5 +32,34 @@ describe("emptyTerminalAction", () => {
 
   test("returns to chat in full mode", () => {
     expect(emptyTerminalAction({ full: true })).toBe("chat")
+  })
+})
+
+describe("showInlineTerminal", () => {
+  test("shows the docked terminal when chat surface keeps it opened", () => {
+    expect(
+      showInlineTerminal({
+        terminal: false,
+        opened: true,
+      }),
+    ).toBe(true)
+  })
+
+  test("hides the docked terminal when the drawer is closed", () => {
+    expect(
+      showInlineTerminal({
+        terminal: false,
+        opened: false,
+      }),
+    ).toBe(false)
+  })
+
+  test("hides the docked terminal in full terminal mode", () => {
+    expect(
+      showInlineTerminal({
+        terminal: true,
+        opened: true,
+      }),
+    ).toBe(false)
   })
 })

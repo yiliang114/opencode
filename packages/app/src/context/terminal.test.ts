@@ -93,6 +93,14 @@ let qwenInput: (input: {
   }
 }
 let ptySession: (session?: string, reuse?: boolean) => string | undefined
+let shouldResetActiveTerminal: (input: {
+  active?: {
+    session?: string
+    qwen?: string
+  }
+  session?: string
+  qwen?: string
+}) => boolean
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
@@ -116,6 +124,7 @@ beforeAll(async () => {
   shellInput = mod.shellInput
   qwenInput = mod.qwenInput
   ptySession = mod.ptySession
+  shouldResetActiveTerminal = mod.shouldResetActiveTerminal
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {
@@ -211,6 +220,41 @@ describe("cloneTerminal", () => {
       rows: undefined,
       cols: undefined,
     })
+  })
+})
+
+describe("shouldResetActiveTerminal", () => {
+  test("keeps the active terminal when it already belongs to the target session", () => {
+    expect(
+      shouldResetActiveTerminal({
+        active: {
+          session: "ses_123",
+        },
+        session: "ses_123",
+      }),
+    ).toBe(false)
+  })
+
+  test("resets the active terminal when switching to a different linked session", () => {
+    expect(
+      shouldResetActiveTerminal({
+        active: {
+          session: "ses_123",
+        },
+        session: "ses_456",
+      }),
+    ).toBe(true)
+  })
+
+  test("resets the active terminal when switching to a different raw qwen session", () => {
+    expect(
+      shouldResetActiveTerminal({
+        active: {
+          qwen: "qwen_123",
+        },
+        qwen: "qwen_456",
+      }),
+    ).toBe(true)
   })
 })
 

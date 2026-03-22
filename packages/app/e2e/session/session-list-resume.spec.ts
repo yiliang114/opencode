@@ -13,7 +13,7 @@ test("sidebar returns a linked session to its existing terminal surface", async 
       await switchTerminal.click()
 
       await waitTerminalReady(page)
-      const first = await page.locator(terminalSelector).first().getAttribute(terminalAttr)
+      const first = await page.locator(`${terminalSelector}:visible`).first().getAttribute(terminalAttr)
       if (!first) throw new Error("Missing active terminal id")
 
       await openSidebar(page)
@@ -25,7 +25,7 @@ test("sidebar returns a linked session to its existing terminal surface", async 
       await expect(page).toHaveURL(new RegExp(`/session/${a.id}(?:[?#]|$)`))
       await expect(page.locator('[data-action="session-switch-chat"]').first()).toBeVisible()
       await waitTerminalReady(page)
-      await expect(page.locator(terminalSelector).first()).toHaveAttribute(terminalAttr, first)
+      await expect(page.locator(`${terminalSelector}:visible`).first()).toHaveAttribute(terminalAttr, first)
     })
   })
 })

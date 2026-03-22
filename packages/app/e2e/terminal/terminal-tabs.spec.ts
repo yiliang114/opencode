@@ -36,7 +36,7 @@ async function store(page: Page, key: string) {
   }, key)
 }
 
-test("inactive terminal tab buffers persist across tab switches", async ({ page, withProject }) => {
+test("inactive terminal tab switches keep buffers live without persisting snapshots", async ({ page, withProject }) => {
   await withProject(async ({ directory, gotoSession }) => {
     const key = workspacePersistKey(directory, "terminal")
     const one = `E2E_TERM_ONE_${Date.now()}`
@@ -50,7 +50,7 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
 
     await runTerminal(page, { cmd: `echo ${one}`, token: one })
 
-    await page.getByRole("button", { name: /new terminal/i }).click()
+    await page.getByRole("button", { name: /new.*terminal/i }).click()
     await expect(tabs).toHaveCount(2)
 
     await runTerminal(page, { cmd: `echo ${two}`, token: two })
@@ -71,7 +71,7 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
         },
         { timeout: 5_000 },
       )
-      .toEqual({ first: false, second: true })
+      .toEqual({ first: false, second: false })
 
     await second.click()
     await expect(second).toHaveAttribute("aria-selected", "true")
@@ -88,7 +88,7 @@ test("inactive terminal tab buffers persist across tab switches", async ({ page,
         },
         { timeout: 5_000 },
       )
-      .toEqual({ first: true, second: false })
+      .toEqual({ first: false, second: false })
   })
 })
 
@@ -100,7 +100,7 @@ test("closing the active terminal tab falls back to the previous tab", async ({ 
     await gotoSession()
     await open(page)
 
-    await page.getByRole("button", { name: /new terminal/i }).click()
+    await page.getByRole("button", { name: /new.*terminal/i }).click()
     await expect(tabs).toHaveCount(2)
 
     const second = tabs.filter({ hasText: /Terminal 2/ }).first()
@@ -128,5 +128,39 @@ test("closing the active terminal tab falls back to the previous tab", async ({ 
         { timeout: 15_000 },
       )
       .toEqual({ count: 1, first: true })
+  })
+})
+
+test("terminal tab switches keep existing terminal nodes mounted", async ({ page, withProject }) => {
+  await withProject(async ({ gotoSession }) => {
+    const tabs = page.locator('#terminal-panel [data-slot="tabs-trigger"]')
+    const first = tabs.filter({ hasText: /Terminal 1/ }).first()
+    const second = tabs.filter({ hasText: /Terminal 2/ }).first()
+
+    await gotoSession()
+    await open(page)
+
+    await page.getByRole("button", { name: /new.*terminal/i }).click()
+    await expect(tabs).toHaveCount(2)
+
+    const id = await page.locator(`${terminalSelector}:visible`).first().getAttribute("data-pty-id")
+    if (!id) throw new Error("missing terminal id")
+    await page.evaluate((id) => {
+      ;(window as Window & { __term_ref?: Element | null }).__term_ref = document.querySelector(`[data-pty-id="${id}"]`)
+    }, id)
+
+    await second.click()
+    await expect(second).toHaveAttribute("aria-selected", "true")
+    await first.click()
+    await expect(first).toHaveAttribute("aria-selected", "true")
+
+    await expect
+      .poll(() =>
+        page.evaluate((id) => {
+          const win = window as Window & { __term_ref?: Element | null }
+          return document.querySelector(`[data-pty-id="${id}"]`) === win.__term_ref
+        }, id),
+      )
+      .toBe(true)
   })
 })

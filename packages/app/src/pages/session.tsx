@@ -51,6 +51,7 @@ import { guessSize } from "@/pages/session/terminal-size"
 import { TerminalPanel } from "@/pages/session/terminal-panel"
 import { terminalPage } from "@/pages/session/qwen-route"
 import { setSurface } from "@/pages/session/session-switch"
+import { showInlineTerminal } from "@/pages/session/terminal-surface"
 import { useSessionCommands } from "@/pages/session/use-session-commands"
 import { useSessionHashScroll } from "@/pages/session/use-session-hash-scroll"
 import { Identifier } from "@/utils/id"
@@ -320,6 +321,12 @@ export default function Page() {
   const surface = createMemo(() => view().surface.current())
   const rawQwen = createMemo(() => !!qwen() && !params.id)
   const terminalMode = createMemo(() => rawQwen() || terminalPage({ surface: surface(), id: params.id, qwen: qwen() }))
+  const inlineTerminal = createMemo(() =>
+    showInlineTerminal({
+      terminal: terminalMode(),
+      opened: view().terminal.opened(),
+    }),
+  )
 
   createEffect(() => {
     if (!untrack(() => prompt.ready())) return
@@ -1916,7 +1923,7 @@ export default function Page() {
         />
       </div>
 
-      <Show when={!terminalMode()}>
+      <Show when={inlineTerminal()}>
         <TerminalPanel />
       </Show>
     </div>

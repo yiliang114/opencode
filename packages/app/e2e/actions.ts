@@ -37,8 +37,12 @@ async function terminalID(term: Locator) {
   throw new Error(`Active terminal missing ${terminalAttr}`)
 }
 
+function activeTerminal(page: Page) {
+  return page.locator(`${terminalSelector}:visible`).first()
+}
+
 export async function terminalConnects(page: Page, input?: { term?: Locator }) {
-  const term = input?.term ?? page.locator(terminalSelector).first()
+  const term = input?.term ?? activeTerminal(page)
   const id = await terminalID(term)
   return page.evaluate((id) => {
     return (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]?.connects ?? 0
@@ -46,7 +50,7 @@ export async function terminalConnects(page: Page, input?: { term?: Locator }) {
 }
 
 export async function disconnectTerminal(page: Page, input?: { term?: Locator }) {
-  const term = input?.term ?? page.locator(terminalSelector).first()
+  const term = input?.term ?? activeTerminal(page)
   const id = await terminalID(term)
   await page.evaluate((id) => {
     ;(window as E2EWindow).__opencode_e2e?.terminal?.controls?.[id]?.disconnect?.()
@@ -54,7 +58,7 @@ export async function disconnectTerminal(page: Page, input?: { term?: Locator })
 }
 
 async function terminalReady(page: Page, term?: Locator) {
-  const next = term ?? page.locator(terminalSelector).first()
+  const next = term ?? activeTerminal(page)
   const id = await terminalID(next)
   return page.evaluate((id) => {
     const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]
@@ -63,7 +67,7 @@ async function terminalReady(page: Page, term?: Locator) {
 }
 
 async function terminalFocusIdle(page: Page, term?: Locator) {
-  const next = term ?? page.locator(terminalSelector).first()
+  const next = term ?? activeTerminal(page)
   const id = await terminalID(next)
   return page.evaluate((id) => {
     const state = (window as E2EWindow).__opencode_e2e?.terminal?.terminals?.[id]
@@ -72,7 +76,7 @@ async function terminalFocusIdle(page: Page, term?: Locator) {
 }
 
 async function terminalHas(page: Page, input: { term?: Locator; token: string }) {
-  const next = input.term ?? page.locator(terminalSelector).first()
+  const next = input.term ?? activeTerminal(page)
   const id = await terminalID(next)
   return page.evaluate(
     (input) => {
@@ -107,7 +111,7 @@ async function promptSlashSelected(page: Page, input: { id: string; count: numbe
 }
 
 export async function waitTerminalReady(page: Page, input?: { term?: Locator; timeout?: number }) {
-  const term = input?.term ?? page.locator(terminalSelector).first()
+  const term = input?.term ?? activeTerminal(page)
   const timeout = input?.timeout ?? 10_000
   await expect(term).toBeVisible()
   await expect(term.locator("textarea")).toHaveCount(1)
@@ -115,7 +119,7 @@ export async function waitTerminalReady(page: Page, input?: { term?: Locator; ti
 }
 
 export async function waitTerminalFocusIdle(page: Page, input?: { term?: Locator; timeout?: number }) {
-  const term = input?.term ?? page.locator(terminalSelector).first()
+  const term = input?.term ?? activeTerminal(page)
   const timeout = input?.timeout ?? 10_000
   await waitTerminalReady(page, { term, timeout })
   await expect.poll(() => terminalFocusIdle(page, term), { timeout }).toBe(true)
@@ -152,7 +156,7 @@ export async function runPromptSlash(
 }
 
 export async function runTerminal(page: Page, input: { cmd: string; token: string; term?: Locator; timeout?: number }) {
-  const term = input.term ?? page.locator(terminalSelector).first()
+  const term = input.term ?? activeTerminal(page)
   const timeout = input.timeout ?? 10_000
   await waitTerminalReady(page, { term, timeout })
   const textarea = term.locator("textarea")

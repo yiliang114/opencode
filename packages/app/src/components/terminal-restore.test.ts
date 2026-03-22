@@ -10,22 +10,22 @@ describe("restoreBuffer", () => {
     ).toBe("shell-state")
   })
 
-  test("does not replay persisted buffer for a linked qwen session terminal", () => {
+  test("replays persisted buffer for a linked qwen session terminal", () => {
     expect(
       restoreBuffer({
         buffer: "qwen-state",
         session: "ses_123",
       }),
-    ).toBe("")
+    ).toBe("qwen-state")
   })
 
-  test("does not replay persisted buffer for a raw qwen terminal", () => {
+  test("replays persisted buffer for a raw qwen terminal", () => {
     expect(
       restoreBuffer({
         buffer: "qwen-state",
         qwen: "qwen_123",
       }),
-    ).toBe("")
+    ).toBe("qwen-state")
   })
 })
 
@@ -40,14 +40,14 @@ describe("restoreCursor", () => {
     ).toBe(42)
   })
 
-  test("requests full server replay for linked qwen terminals", () => {
+  test("resumes from the persisted cursor for linked qwen terminals after local replay", () => {
     expect(
       restoreCursor({
-        replay: false,
+        replay: true,
         cursor: 42,
-        restore: "",
+        restore: "qwen-state",
       }),
-    ).toBe(0)
+    ).toBe(42)
   })
 
   test("requests websocket tail when cursor is unavailable after local replay", () => {

@@ -164,6 +164,13 @@ export function TerminalPanel(props: {
   })
 
   const all = terminal.all
+  const panels = createMemo(() => {
+    const active = terminal.active()
+    const items = all()
+    const index = active ? items.findIndex((pty) => pty.id === active) : -1
+    if (index <= 0) return items
+    return [items[index], ...items.slice(0, index), ...items.slice(index + 1)]
+  })
   const ids = createMemo(() => all().map((pty) => pty.id))
 
   const handleTerminalDragStart = (event: unknown) => {
@@ -295,23 +302,38 @@ export function TerminalPanel(props: {
                 </Tabs.List>
               </Tabs>
               <div class="flex-1 min-h-0 relative">
-                <Show when={terminal.active()} keyed>
-                  {(id) => (
-                    <Show when={all().find((pty) => pty.id === id)}>
-                      {(pty) => (
-                        <div id={`terminal-wrapper-${id}`} class="absolute inset-0">
-                          <Terminal
-                            pty={pty()}
-                            autoFocus={opened()}
-                            onConnect={() => terminal.trim(id)}
-                            onCleanup={terminal.update}
-                            onConnectError={() => terminal.clone(id)}
-                          />
-                        </div>
-                      )}
-                    </Show>
+                <For each={panels()}>
+                  {(pty) => (
+                    (() => {
+                      const active = () => terminal.active() === pty.id
+                      return (
+                    <div
+                      id={`terminal-wrapper-${pty.id}`}
+                      aria-hidden={!active()}
+                      class="absolute top-0 h-full w-full"
+                      classList={{
+                        invisible: !active(),
+                        "pointer-events-none": !active(),
+                        "z-10": active(),
+                        "z-0": !active(),
+                      }}
+                      style={{
+                        left: active() ? "0" : "-200vw",
+                      }}
+                    >
+                      <Terminal
+                        pty={pty}
+                        active={active()}
+                        autoFocus={opened() && active()}
+                        onConnect={() => terminal.trim(pty.id)}
+                        onCleanup={terminal.update}
+                        onConnectError={() => terminal.clone(pty.id)}
+                      />
+                    </div>
+                      )
+                    })()
                   )}
-                </Show>
+                </For>
               </div>
             </div>
             <DragOverlay>

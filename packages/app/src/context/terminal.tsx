@@ -218,6 +218,19 @@ export function cloneTerminal(pty: LocalPTY, next: { id: string; title?: string 
   }
 }
 
+export function shouldResetActiveTerminal(input: {
+  active?: {
+    session?: string
+    qwen?: string
+  }
+  session?: string
+  qwen?: string
+}) {
+  if (input.session) return input.active?.session !== input.session
+  if (input.qwen) return input.active?.qwen !== input.qwen
+  return false
+}
+
 export function clearWorkspaceTerminals(dir: string, sessionIDs?: string[], platform?: Platform) {
   const key = getWorkspaceTerminalCacheKey(dir)
   for (const cache of caches) {
@@ -414,6 +427,10 @@ function createWorkspaceTerminalSession(
         setStore("active", existing.id)
         return existing.id
       }
+      const active = store.all.find((pty) => pty.id === store.active)
+      if (shouldResetActiveTerminal({ active, session: next })) {
+        setStore("active", undefined)
+      }
       this.new({
         link: true,
         session,
@@ -427,6 +444,10 @@ function createWorkspaceTerminalSession(
       if (existing) {
         setStore("active", existing.id)
         return existing.id
+      }
+      const active = store.all.find((pty) => pty.id === store.active)
+      if (shouldResetActiveTerminal({ active, qwen })) {
+        setStore("active", undefined)
       }
       this.new({
         qwen,

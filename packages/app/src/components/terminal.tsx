@@ -14,13 +14,16 @@ import { terminalAttr, terminalProbe } from "@/testing/terminal"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "@/utils/runtime-adapters"
 import { terminalWriter } from "@/utils/terminal-writer"
 import { restoreBuffer, restoreCursor } from "./terminal-restore"
+import { refreshTerminal } from "./terminal-refresh"
 import { terminalTheme } from "./terminal-theme"
+import { forwardData } from "./terminal-wire"
 import { terminalStyle, terminalVisible } from "./terminal-visibility"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
+  active?: boolean
   autoFocus?: boolean
   onSubmit?: () => void
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
@@ -147,11 +150,12 @@ export const Terminal = (props: TerminalProps) => {
   const language = useLanguage()
   const server = useServer()
   let container!: HTMLDivElement
-  const [local, others] = splitProps(props, ["pty", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
+  const [local, others] = splitProps(props, ["pty", "active", "class", "classList", "autoFocus", "onConnect", "onConnectError"])
   const id = local.pty.id
   const probe = terminalProbe(id)
   const restore = restoreBuffer(local.pty)
   const replay = !!restore
+  const stream = !!(local.pty.session || local.pty.qwen)
   const restoreSize =
     restore &&
     typeof local.pty.cols === "number" &&
@@ -186,7 +190,9 @@ export const Terminal = (props: TerminalProps) => {
   let drop: VoidFunction | undefined
   let reconn: ReturnType<typeof setTimeout> | undefined
   let tries = 0
-  const [shown, setShown] = createSignal(!restore)
+  const [shown, setShown] = createSignal(!restore && !stream)
+  const [ready, setReady] = createSignal(false)
+  let showing = false
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -275,6 +281,21 @@ export const Terminal = (props: TerminalProps) => {
     if (!term) return
     setOptionIfSupported(term, "fontFamily", font)
     scheduleFit()
+  })
+
+  createEffect(() => {
+    if (!ready()) return
+    if (!local.active) return
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (disposed) return
+        refreshTerminal({
+          term,
+          fit: fitAddon,
+        })
+      })
+    })
+    onCleanup(() => cancelAnimationFrame(frame))
   })
 
   let zoom = platform.webviewZoom?.()
@@ -399,7 +420,13 @@ export const Terminal = (props: TerminalProps) => {
       })
       cleanups.push(() => disposeIfDisposable(onResize))
       const onData = t.onData((data) => {
-        if (ws?.readyState === WebSocket.OPEN) ws.send(data)
+        const next = forwardData({
+          data,
+          session: local.pty.session,
+          qwen: local.pty.qwen,
+        })
+        if (!next) return
+        if (ws?.readyState === WebSocket.OPEN) ws.send(next)
       })
       cleanups.push(() => disposeIfDisposable(onData))
       const onKey = t.onKey((key) => {
@@ -431,10 +458,19 @@ export const Terminal = (props: TerminalProps) => {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               if (!disposed) setShown(true)
+              showing = false
               resolve()
             })
           })
         })
+
+      const show = () => {
+        if (shown() || showing) return
+        showing = true
+        output?.flush(() => {
+          void reveal()
+        })
+      }
 
       if (restore && restoreSize) {
         await write(restore)
@@ -453,6 +489,7 @@ export const Terminal = (props: TerminalProps) => {
         }
         startResize()
       }
+      setReady(true)
 
       const once = { value: false }
       const decoder = new TextDecoder()
@@ -513,6 +550,7 @@ export const Terminal = (props: TerminalProps) => {
           tries = 0
           probe.connect()
           local.onConnect?.()
+          if (stream && !restore) setShown(true)
           scheduleSize(t.cols, t.rows)
         }
 
@@ -540,6 +578,7 @@ export const Terminal = (props: TerminalProps) => {
           output?.push(data)
           cursor += data.length
           seek = cursor
+          show()
         }
 
         const handleError = (error: Event) => {
@@ -627,7 +666,7 @@ export const Terminal = (props: TerminalProps) => {
       tabIndex={-1}
       style={terminalStyle({
         background: terminalColors().background,
-        visible: terminalVisible({ restore, shown: shown() }),
+        visible: terminalVisible({ restore, shown: shown(), stream }),
       })}
       classList={{
         ...(local.classList ?? {}),

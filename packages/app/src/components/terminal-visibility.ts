@@ -1,7 +1,7 @@
 import type { JSX } from "solid-js"
 
-export function terminalVisible(input: { restore?: string; shown: boolean }) {
-  if (!input.restore) return true
+export function terminalVisible(input: { restore?: string; shown: boolean; stream: boolean }) {
+  if (!input.restore && !input.stream) return true
   return input.shown
 }
 
